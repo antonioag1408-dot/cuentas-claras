@@ -424,6 +424,11 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
         <input id="mv-q" type="search" placeholder="Buscar en todos los meses" autocomplete="off" enterkeyhint="search">
       </label>
+      <div class="seg small" id="mv-tipo">
+        <button type="button" data-tipo="all">Todos</button>
+        <button type="button" data-tipo="compartido">Compartidos</button>
+        <button type="button" data-tipo="personal">Personales</button>
+      </div>
       <div class="seg small" id="mv-quien"></div>
       <div class="chips scroll" id="mv-filtros"></div>
       <p class="sumline" id="mv-total"></p>
@@ -567,7 +572,7 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     view: "anadir", mes: ym(new Date()), filtro: "all", alcance: "comp",
     editId: null, fCat: null, fPaga: "A", fTipo: "compartido",
     fParte: null, parteOpen: false, catManual: false,
-    q: "", quien: "all", saldo: false
+    q: "", quien: "all", tipo: "all", saldo: false
   };
 
   const eurF = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" });
@@ -776,7 +781,7 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     }
     const c = catOf(g.cat);
     const titulo = g.nota ? g.nota : c.nombre;
-    const sub = (g.nota ? c.nombre + " · " : "") + "Pagó " + nombre(g.paga);
+    const sub = [g.nota ? c.nombre : "", g.tipo === "personal" ? "" : "Pagó " + nombre(g.paga)].filter(Boolean).join(" · ");
     const tag = g.tipo === "personal" ? '<span class="tag">Personal</span>' : "";
     return `<button type="button" class="row${g.pend ? " pend" : ""}" data-edit="${esc(g.id)}"><span class="dot" style="background:${color(c.c)}"></span>
       <span class="main"><div class="t">${esc(titulo)}</div><div class="s">${esc(sub)}${tag}</div></span>
@@ -901,6 +906,8 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
   function renderMov() {
     $("#mv-filtros").innerHTML = [{ id: "all", nombre: "Todas", c: null }].concat(cfg.cats).map((c) =>
       `<button type="button" class="chip" data-filtro="${esc(c.id)}" aria-pressed="${S.filtro === c.id}">${c.c ? `<i style="background:${color(c.c)}"></i>` : ""}${esc(c.nombre)}</button>`).join("");
+    $$("#mv-tipo button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.tipo === S.tipo)));
+    $("#mv-quien").hidden = S.tipo === "personal";
     $("#mv-quien").innerHTML = [["all", "Pagó cualquiera"], ["A", nombre("A")], ["B", nombre("B")]].map(([v, t]) =>
       `<button type="button" data-quien="${v}" aria-pressed="${S.quien === v}">${esc(t)}</button>`).join("");
     const lista = $("#mv-lista");
@@ -908,15 +915,19 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     const q = normNota(S.q);
     const texto = (g) => normNota([g.nota, g.tipo === "liquidacion" ? "saldar cuentas" : catOf(g.cat).nombre, ((g.cent || 0) / 100).toFixed(2).replace(".", ","), nombre(g.paga)].join(" "));
     const items = gastos.filter((g) => (q ? texto(g).includes(q) : enMes(g, S.mes))
-      && (S.filtro === "all" || g.cat === S.filtro) && (S.quien === "all" || g.paga === S.quien)).sort(ordenar);
+      && (S.filtro === "all" || g.cat === S.filtro)
+      && (S.tipo === "all" || (S.tipo === "personal" ? g.tipo === "personal" : g.tipo !== "personal"))
+      && (S.tipo === "personal" || S.quien === "all" || g.paga === S.quien)).sort(ordenar);
     const solo = items.filter(esGasto);
     const tot = solo.reduce((a, g) => a + (g.cent || 0), 0);
     $("#mv-total").innerHTML = solo.length
-      ? `${solo.length} ${solo.length === 1 ? "gasto" : "gastos"}${q ? " en todos los meses" : ""} · total <b>${eur(tot)}</b>` : "";
+      ? `${solo.length} ${solo.length === 1 ? "gasto" : "gastos"}${S.tipo === "personal" ? (solo.length === 1 ? " personal" : " personales") : S.tipo === "compartido" ? (solo.length === 1 ? " compartido" : " compartidos") : ""}${q ? " en todos los meses" : ""} · total <b>${eur(tot)}</b>` : "";
     if (!items.length) {
       lista.innerHTML = q
         ? emptyHTML("Sin resultados", "No hay ningún gasto que contenga «" + esc(S.q.trim()) + "» con estos filtros.")
-        : emptyHTML("Nada en " + mesNombre(S.mes), S.filtro === "all" && S.quien === "all" ? "Los gastos que apuntéis este mes aparecerán aquí, agrupados por día." : "No hay gastos con estos filtros este mes.");
+        : S.tipo === "personal" && S.filtro === "all"
+          ? emptyHTML("Sin gastos personales en " + mesNombre(S.mes), "Al apuntar un gasto, marca «Personal» y aparecerá aquí. Solo lo ves tú.")
+          : emptyHTML("Nada en " + mesNombre(S.mes), S.filtro === "all" && S.quien === "all" && S.tipo === "all" ? "Los gastos que apuntéis este mes aparecerán aquí, agrupados por día." : "No hay gastos con estos filtros este mes.");
       return;
     }
     let html = "", dia = "";
@@ -1264,6 +1275,7 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     if (t.parentElement && t.parentElement.id === "r-alcance") { S.alcance = d.v; return renderRes(); }
     if (d.filtro) { S.filtro = d.filtro; return renderMov(); }
     if (d.quien) { S.quien = d.quien; return renderMov(); }
+    if (d.tipo) { S.tipo = d.tipo; return renderMov(); }
     if (d.mes) { S.mes = shiftMes(S.mes, Number(d.mes)); S.saldo = false; renderNav(); renderMov(); return renderRes(); }
     if (d.pick) { S.mes = d.pick; renderNav(); renderMov(); return renderRes(); }
     if (d.edit) return editar(d.edit);
