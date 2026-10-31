@@ -301,7 +301,24 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
   bottom: calc(var(--nav-h) + 14px + env(safe-area-inset-bottom, 0px));
   background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 999px; font-size: 14px; font-weight: 600;
   z-index: 7; max-width: calc(100% - 32px); text-align: center;
+  display: flex; align-items: center; gap: 14px;
 }
+#toast[hidden] { display: none; }
+#toast button { background: none; border: 0; padding: 4px 2px; color: inherit; font-weight: 800; text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; }
+.row.pend { opacity: .55; }
+.inline-link { background: none; border: 0; padding: 0; color: var(--accent); font-weight: 600; font-size: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.parte-wrap { display: grid; gap: 6px; padding-top: 4px; }
+.edit-acts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+.search {
+  display: flex; align-items: center; gap: 8px; min-width: 0;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 12px;
+}
+.search:focus-within { border-color: var(--accent); }
+.search svg { width: 18px; height: 18px; flex: none; fill: none; stroke: var(--muted); stroke-width: 2; stroke-linecap: round; }
+.search input { flex: 1; min-width: 0; border: 0; background: transparent; padding: 11px 0; font-size: 16px; outline: none; }
+.balchart { display: grid; gap: 4px; }
+.balchart svg { width: 100%; height: auto; display: block; overflow: visible; }
+.balchart .cap { font-size: 12px; color: var(--muted); }
 @media (prefers-reduced-motion: no-preference) {
   #toast { transition: opacity .2s; }
   .fill, .col .cb { transition: width .3s ease, height .3s ease; }
@@ -376,19 +393,17 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
             <button type="button" data-v="personal">Personal</button>
           </div>
           <p class="hint" id="f-reparto"></p>
+          <div class="parte-wrap" id="f-parte-wrap" hidden>
+            <input type="range" id="f-parte" min="0" max="100" step="5" aria-label="Porcentaje que paga la persona 1 en este gasto">
+            <div class="split"><span id="f-parte-a"></span><span id="f-parte-b"></span></div>
+          </div>
         </fieldset>
         <label class="field" for="f-fecha">Fecha<input type="date" id="f-fecha"></label>
         <p class="err" id="f-err" hidden></p>
         <button class="btn primary" type="submit" id="btn-guardar">Guardar gasto</button>
-        <div id="del-zone" class="block" hidden>
-          <button type="button" class="btn danger" id="btn-del">Borrar este gasto</button>
-          <div class="confirm" id="del-confirm" hidden>
-            <p>Se borrará para los dos. No se puede deshacer.</p>
-            <div class="acts">
-              <button type="button" class="btn small danger" id="btn-del-yes">Sí, borrar</button>
-              <button type="button" class="btn small" id="btn-del-no">No</button>
-            </div>
-          </div>
+        <div id="del-zone" class="edit-acts" hidden>
+          <button type="button" class="btn" id="btn-repetir">Repetir hoy</button>
+          <button type="button" class="btn danger" id="btn-del">Borrar</button>
         </div>
       </form>
 
@@ -405,6 +420,11 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
         <h2 class="mes-label"></h2>
         <button type="button" data-mes="1" aria-label="Mes siguiente">›</button>
       </div>
+      <label class="search" for="mv-q">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <input id="mv-q" type="search" placeholder="Buscar en todos los meses" autocomplete="off" enterkeyhint="search">
+      </label>
+      <div class="seg small" id="mv-quien"></div>
       <div class="chips scroll" id="mv-filtros"></div>
       <p class="sumline" id="mv-total"></p>
       <div id="mv-lista"></div>
@@ -546,7 +566,8 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
   const S = {
     view: "anadir", mes: ym(new Date()), filtro: "all", alcance: "comp",
     editId: null, fCat: null, fPaga: "A", fTipo: "compartido",
-    saldo: false, delLiq: null
+    fParte: null, parteOpen: false, catManual: false,
+    q: "", quien: "all", saldo: false
   };
 
   const eurF = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" });
@@ -594,10 +615,22 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
   }
 
   /* ---------- utilidades de UI ---------- */
-  let toastT = null;
-  function toast(msg) {
-    const t = $("#toast"); t.textContent = msg; t.hidden = false; t.style.opacity = "1";
-    clearTimeout(toastT); toastT = setTimeout(() => { t.style.opacity = "0"; setTimeout(() => (t.hidden = true), 250); }, 2600);
+  let toastT = null, toastFn = null;
+  function toast(msg, accion, fn) {
+    const t = $("#toast"); t.textContent = "";
+    const sp = document.createElement("span"); sp.textContent = msg; t.appendChild(sp);
+    toastFn = null;
+    if (accion && fn) {
+      const b = document.createElement("button"); b.type = "button"; b.id = "toast-act"; b.textContent = accion;
+      t.appendChild(b); toastFn = fn;
+    }
+    t.hidden = false; t.style.opacity = "1";
+    clearTimeout(toastT);
+    toastT = setTimeout(cerrarToast, accion ? 6000 : 2600);
+  }
+  function cerrarToast() {
+    const t = $("#toast"); t.style.opacity = "0"; toastFn = null;
+    setTimeout(() => { if (t.style.opacity === "0") t.hidden = true; }, 250);
   }
   function banner(msg) { const b = $("#banner"); b.textContent = msg; b.hidden = !msg; }
   function formErr(msg) { const e = $("#f-err"); e.textContent = msg || ""; e.hidden = !msg; }
@@ -736,19 +769,16 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
   function rowHTML(g) {
     if (g.tipo === "liquidacion") {
       const otro = g.paga === "A" ? "B" : "A";
-      const confirm = S.delLiq === g.id
-        ? `<div class="confirm"><p>¿Borrar este pago? El balance volverá a mostrar la deuda.</p><div class="acts"><button type="button" class="btn small danger" data-liq-yes="${esc(g.id)}">Sí, borrar</button><button type="button" class="btn small" data-liq-no>No</button></div></div>`
-        : "";
-      return `<div class="liq-wrap"><div class="row liq"><span class="dot" style="background:var(--muted)"></span>
+      return `<div class="liq-wrap"><div class="row liq${g.pend ? " pend" : ""}"><span class="dot" style="background:var(--muted)"></span>
         <span class="main"><div class="t">${esc(nombre(g.paga))} pagó a ${esc(nombre(otro))}</div>
-        <div class="s">Cuentas saldadas · <button type="button" class="mini" data-liq="${esc(g.id)}">Borrar</button></div></span>
-        <span class="amt">${eur(g.cent)}</span></div>${confirm}</div>`;
+        <div class="s">Cuentas saldadas${g.pend ? "" : ` · <button type="button" class="mini" data-liq="${esc(g.id)}">Borrar</button>`}</div></span>
+        <span class="amt">${eur(g.cent)}</span></div></div>`;
     }
     const c = catOf(g.cat);
     const titulo = g.nota ? g.nota : c.nombre;
     const sub = (g.nota ? c.nombre + " · " : "") + "Pagó " + nombre(g.paga);
     const tag = g.tipo === "personal" ? '<span class="tag">Personal</span>' : "";
-    return `<button type="button" class="row" data-edit="${esc(g.id)}"><span class="dot" style="background:${color(c.c)}"></span>
+    return `<button type="button" class="row${g.pend ? " pend" : ""}" data-edit="${esc(g.id)}"><span class="dot" style="background:${color(c.c)}"></span>
       <span class="main"><div class="t">${esc(titulo)}</div><div class="s">${esc(sub)}${tag}</div></span>
       <span class="amt">${eur(g.cent)}</span></button>`;
   }
@@ -780,11 +810,20 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     $("#f-paga").innerHTML = ["A", "B"].map((p) =>
       `<button type="button" data-paga="${p}" aria-pressed="${S.fPaga === p}">${esc(nombre(p))}</button>`).join("");
     $$("#f-tipo button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === S.fTipo)));
-    const g = S.editId ? gastos.find((x) => x.id === S.editId) : null;
-    const p = g && g.tipo === "compartido" && S.fTipo === "compartido" ? parteDe(g) : cfg.parteA;
-    $("#f-reparto").textContent = S.fTipo === "compartido"
-      ? `Se reparte ${Math.round(p * 100)} % ${nombre("A")} · ${Math.round((1 - p) * 100)} % ${nombre("B")}.`
-      : `Solo lo verás tú (${nombre(yo || S.fPaga)}). No entra en el reparto.`;
+    const p = parteForm();
+    const distinto = Math.abs(p - cfg.parteA) > 0.001;
+    if (S.fTipo === "compartido") {
+      $("#f-reparto").innerHTML = `Se reparte <b>${Math.round(p * 100)} % ${esc(nombre("A"))} · ${Math.round((1 - p) * 100)} % ${esc(nombre("B"))}</b>${distinto ? " (solo en este gasto)" : ""}. `
+        + (S.parteOpen ? `<button type="button" class="inline-link" id="f-parte-reset">Volver al reparto habitual</button>` : `<button type="button" class="inline-link" id="f-parte-go">Cambiar</button>`);
+    } else {
+      $("#f-reparto").textContent = `Solo lo verás tú (${nombre(yo || S.fPaga)}). No entra en el reparto.`;
+    }
+    $("#f-parte-wrap").hidden = !(S.fTipo === "compartido" && S.parteOpen);
+    if (S.parteOpen) {
+      $("#f-parte").value = Math.round(p * 100);
+      $("#f-parte-a").textContent = `${nombre("A")} ${Math.round(p * 100)} %`;
+      $("#f-parte-b").textContent = `${nombre("B")} ${Math.round((1 - p) * 100)} %`;
+    }
     $("#form-title").textContent = S.editId ? "Editar gasto" : "Nuevo gasto";
     $("#btn-guardar").textContent = S.editId ? "Guardar cambios" : "Guardar gasto";
     $("#btn-cancel-edit").hidden = !S.editId;
@@ -829,6 +868,24 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     }).join("");
   }
 
+  /* Categoría más habitual para una nota ya usada (null si es nueva) */
+  function catDeNota(nota) {
+    const k = normNota(nota); if (!k) return null;
+    const cnt = {}, ult = {};
+    for (const g of gastos) {
+      if (g.tipo === "liquidacion" || normNota(g.nota) !== k) continue;
+      cnt[g.cat] = (cnt[g.cat] || 0) + 1; ult[g.cat] = Math.max(ult[g.cat] || 0, g.ts || 0);
+    }
+    const best = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a] || ult[b] - ult[a])[0];
+    return best && cfg.cats.some((c) => c.id === best) ? best : null;
+  }
+  function autoCat() {
+    if (S.catManual || S.editId) return;
+    const c = catDeNota($("#f-nota").value);
+    if (c && c !== S.fCat) { S.fCat = c; renderForm(); }
+  }
+  const parteForm = () => (typeof S.fParte === "number" ? S.fParte : cfg.parteA);
+
   function emptyHTML(t, s) { return `<div class="empty"><b>${t}</b><span>${s}</span></div>`; }
   const cargando = () => emptyHTML("Cargando gastos…", "Un momento.");
 
@@ -844,19 +901,27 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
   function renderMov() {
     $("#mv-filtros").innerHTML = [{ id: "all", nombre: "Todas", c: null }].concat(cfg.cats).map((c) =>
       `<button type="button" class="chip" data-filtro="${esc(c.id)}" aria-pressed="${S.filtro === c.id}">${c.c ? `<i style="background:${color(c.c)}"></i>` : ""}${esc(c.nombre)}</button>`).join("");
+    $("#mv-quien").innerHTML = [["all", "Pagó cualquiera"], ["A", nombre("A")], ["B", nombre("B")]].map(([v, t]) =>
+      `<button type="button" data-quien="${v}" aria-pressed="${S.quien === v}">${esc(t)}</button>`).join("");
     const lista = $("#mv-lista");
     if (!ready) { lista.innerHTML = cargando(); $("#mv-total").textContent = ""; return; }
-    const items = gastos.filter((g) => enMes(g, S.mes) && (S.filtro === "all" || g.cat === S.filtro)).sort(ordenar);
+    const q = normNota(S.q);
+    const texto = (g) => normNota([g.nota, g.tipo === "liquidacion" ? "saldar cuentas" : catOf(g.cat).nombre, ((g.cent || 0) / 100).toFixed(2).replace(".", ","), nombre(g.paga)].join(" "));
+    const items = gastos.filter((g) => (q ? texto(g).includes(q) : enMes(g, S.mes))
+      && (S.filtro === "all" || g.cat === S.filtro) && (S.quien === "all" || g.paga === S.quien)).sort(ordenar);
     const solo = items.filter(esGasto);
     const tot = solo.reduce((a, g) => a + (g.cent || 0), 0);
-    $("#mv-total").innerHTML = solo.length ? `${solo.length} ${solo.length === 1 ? "gasto" : "gastos"} · total <b>${eur(tot)}</b>` : "";
+    $("#mv-total").innerHTML = solo.length
+      ? `${solo.length} ${solo.length === 1 ? "gasto" : "gastos"}${q ? " en todos los meses" : ""} · total <b>${eur(tot)}</b>` : "";
     if (!items.length) {
-      lista.innerHTML = emptyHTML("Nada en " + mesNombre(S.mes), S.filtro === "all" ? "Los gastos que apuntéis este mes aparecerán aquí, agrupados por día." : "No hay gastos de esta categoría este mes.");
+      lista.innerHTML = q
+        ? emptyHTML("Sin resultados", "No hay ningún gasto que contenga «" + esc(S.q.trim()) + "» con estos filtros.")
+        : emptyHTML("Nada en " + mesNombre(S.mes), S.filtro === "all" && S.quien === "all" ? "Los gastos que apuntéis este mes aparecerán aquí, agrupados por día." : "No hay gastos con estos filtros este mes.");
       return;
     }
     let html = "", dia = "";
     for (const g of items) {
-      if (g.fecha !== dia) { dia = g.fecha; html += `<div class="day">${esc(diaLabel(dia))}</div>`; }
+      if (g.fecha !== dia) { dia = g.fecha; html += `<div class="day">${esc(diaLabel(dia) + (q && dia.slice(0, 4) !== String(new Date().getFullYear()) ? " " + dia.slice(0, 4) : ""))}</div>`; }
       html += rowHTML(g);
     }
     lista.innerHTML = `<div class="list">${html}</div>`;
@@ -893,6 +958,7 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
              <div class="acts"><button type="button" class="btn small" style="background:var(--accent);color:var(--accent-ink);border-color:var(--accent)" id="saldo-yes">Confirmar</button><button type="button" class="btn small" id="saldo-no">Cancelar</button></div></div>`
           : `<div><button type="button" class="btn small" id="saldo-go">Saldar cuentas</button></div>`}`;
     }
+    if (ready) bEl.insertAdjacentHTML("beforeend", balanceChart());
 
     // Por categoría
     const cEl = $("#r-cats");
@@ -948,6 +1014,46 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
       <p class="hint">El signo + indica que ha puesto más de lo que le toca este mes.</p>`;
   }
 
+  /* Evolución del balance día a día (escalones; cada liquidación lo devuelve a 0) */
+  function balanceChart() {
+    const movs = gastos.filter((g) => (g.tipo === "compartido" || g.tipo === "liquidacion") && /^\d{4}-\d{2}-\d{2}$/.test(g.fecha || ""))
+      .slice().sort((a, b) => a.fecha.localeCompare(b.fecha) || (a.ts || 0) - (b.ts || 0));
+    if (!movs.length) return "";
+    const dias = []; let n = 0;
+    for (const g of movs) {
+      const x = g.cent || 0;
+      if (g.tipo === "compartido") { const p = parteDe(g); n += g.paga === "A" ? x * (1 - p) : -x * p; }
+      else n += g.paga === "A" ? x : -x;
+      if (dias.length && dias[dias.length - 1].f === g.fecha) dias[dias.length - 1].v = n; else dias.push({ f: g.fecha, v: n });
+    }
+    const hoyF = hoy(); if (dias[dias.length - 1].f < hoyF) dias.push({ f: hoyF, v: n });
+    if (dias.length < 2) return "";
+    const t = (f) => { const [y, m, d] = f.split("-").map(Number); return Date.UTC(y, m - 1, d); };
+    const t0 = t(dias[0].f), t1 = t(dias[dias.length - 1].f) || t0 + 1;
+    const W = 320, H = 110, L = 4, R = 64, T = 10, B = 18;
+    const maxAbs = Math.max(...dias.map((d) => Math.abs(d.v)), 100);
+    const X = (f) => L + ((t(f) - t0) / Math.max(t1 - t0, 1)) * (W - L - R);
+    const Y = (v) => T + (H - T - B) / 2 - (v / maxAbs) * ((H - T - B) / 2);
+    let path = `M${X(dias[0].f).toFixed(1)},${Y(dias[0].v).toFixed(1)}`;
+    for (let i = 1; i < dias.length; i++) path += ` H${X(dias[i].f).toFixed(1)} V${Y(dias[i].v).toFixed(1)}`;
+    const ult = dias[dias.length - 1], yUlt = Y(ult.v);
+    const fmtF = (f) => { const [y, m, d] = f.split("-").map(Number); return new Date(y, m - 1, d).toLocaleDateString("es-ES", { day: "numeric", month: "short" }).replace(".", ""); };
+    const etiqueta = Math.abs(ult.v) < 1 ? "En paz" : eur0.format(Math.abs(ult.v) / 100);
+    return `<div class="balchart">
+      <span class="eyebrow">Evolución del balance</span>
+      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Evolución del balance desde ${esc(fmtF(dias[0].f))}: ahora ${esc(etiqueta)}">
+        <line x1="${L}" x2="${W - R}" y1="${Y(0).toFixed(1)}" y2="${Y(0).toFixed(1)}" stroke="var(--line)" stroke-width="1"/>
+        <text x="${W - R + 6}" y="${(Y(0) + 4).toFixed(1)}" font-size="10" fill="var(--muted)">0</text>
+        <path d="${path}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>
+        <circle cx="${X(ult.f).toFixed(1)}" cy="${yUlt.toFixed(1)}" r="4" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"><title>${esc(fmtF(ult.f))}: ${esc(etiqueta)}</title></circle>
+        <text x="${W - R + 6}" y="${(Math.abs(yUlt - Y(0)) < 12 ? yUlt - 8 : yUlt + 4).toFixed(1)}" font-size="11" font-weight="600" fill="var(--ink)">${esc(etiqueta)}</text>
+        <text x="${L}" y="${H - 3}" font-size="10" fill="var(--muted)">${esc(fmtF(dias[0].f))}</text>
+        <text x="${W - R}" y="${H - 3}" font-size="10" fill="var(--muted)" text-anchor="end">hoy</text>
+      </svg>
+      <span class="cap">Por encima de la línea: ${esc(nombre("B"))} debe a ${esc(nombre("A"))}. Por debajo: al revés.</span>
+    </div>`;
+  }
+
   function fillAjustes() {
     draft = JSON.parse(JSON.stringify(cfg));
     $("#a-nombreA").value = draft.nombreA; $("#a-nombreB").value = draft.nombreB;
@@ -973,28 +1079,35 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
   }
 
   /* ---------- acciones ---------- */
+  function focoImporte() { try { const i = $("#f-importe"); i.focus(); if (i.value) i.select(); } catch (e) {} }
   function go(v) {
     if (!VIEWS.includes(v)) v = "anadir";
-    if (S.view === v) return;
+    if (S.view === v) { if (v === "anadir" && !S.editId) focoImporte(); return; }
     if (v === "ajustes") fillAjustes();
-    S.view = v; S.saldo = false; S.delLiq = null;
+    S.view = v; S.saldo = false;
     try { if (location.hash !== "#" + v) location.hash = v; } catch (e) {}
     renderAll(); window.scrollTo(0, 0);
+    if (v === "anadir" && !S.editId && connected) focoImporte();
   }
 
   function resetForm() {
     S.editId = null; S.fTipo = "compartido"; S.fPaga = yo || S.fPaga;
+    S.fParte = null; S.parteOpen = false; S.catManual = false;
     $("#f-importe").value = ""; $("#f-nota").value = ""; $("#f-fecha").value = hoy();
-    $("#del-confirm").hidden = true; formErr("");
+    formErr("");
     renderForm(); renderWho();
   }
 
   function editar(id) {
     const g = gastos.find((x) => x.id === id); if (!g || g.tipo === "liquidacion") return;
+    if (g.pend) { toast("Se está guardando; ábrelo en un momento."); return; }
     S.editId = id; S.fCat = g.cat; S.fPaga = g.paga === "B" ? "B" : "A"; S.fTipo = g.tipo === "personal" ? "personal" : "compartido";
+    S.fParte = g.tipo === "compartido" ? parteDe(g) : null;
+    S.parteOpen = g.tipo === "compartido" && Math.abs(parteDe(g) - cfg.parteA) > 0.001;
+    S.catManual = true;
     $("#f-importe").value = ((g.cent || 0) / 100).toFixed(2).replace(".", ",");
     $("#f-nota").value = g.nota || ""; $("#f-fecha").value = g.fecha || hoy();
-    $("#del-confirm").hidden = true; formErr("");
+    formErr("");
     S.view = "anadir";
     try { location.hash = "anadir"; } catch (e) {}
     renderAll(); window.scrollTo(0, 0);
@@ -1016,39 +1129,85 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     if (!connected) { formErr("No hay conexión con la hoja. Recarga la página."); return; }
     const data = {
       fecha: $("#f-fecha").value || hoy(), cent: Math.round(v * 100), cat: S.fCat, paga: S.fPaga, tipo: S.fTipo,
-      parteA: S.fTipo === "compartido" ? cfg.parteA : null, nota: $("#f-nota").value.trim().slice(0, 80)
+      parteA: S.fTipo === "compartido" ? parteForm() : null, nota: $("#f-nota").value.trim().slice(0, 80)
     };
-    const btn = $("#btn-guardar"); const txt = btn.textContent; btn.disabled = true; btn.textContent = "Guardando…";
+    if (S.editId) return guardarEdicion(S.editId, data);
+
+    // Alta instantánea: aparece ya en la lista y se envía por detrás
+    const antes = new Set(gastos.map((g) => g.id));
+    const tmp = Object.assign({ id: "tmp-" + Date.now(), ts: Date.now(), pend: true }, data);
+    gastos = gastos.concat([tmp]);
+    resetForm(); renderAll();
+    let nuevoId = null, deshecho = false;
+    toast("Guardado: " + eur(data.cent) + " en " + catOf(data.cat).nombre, "Deshacer", async () => {
+      deshecho = true;
+      gastos = gastos.filter((g) => g.id !== tmp.id && g.id !== nuevoId); renderAll();
+      if (nuevoId) { try { await api("delete", { id: nuevoId }); } catch (ex) { writeErr(ex); } }
+      rellenarForm(data); toast("Deshecho. Tienes el gasto en el formulario por si quieres corregirlo.");
+    });
     try {
-      if (S.editId) {
-        const orig = gastos.find((g) => g.id === S.editId) || {};
-        if (orig.tipo === "compartido" && S.fTipo === "compartido" && typeof orig.parteA === "number") data.parteA = orig.parteA;
-        await api("update", { id: S.editId, data });
-        toast("Cambios guardados");
-        resetForm(); go("movimientos");
-      } else {
-        await api("add", { data });
-        toast("Guardado: " + eur(data.cent) + " en " + catOf(data.cat).nombre);
-        resetForm();
-      }
-    } catch (ex) { writeErr(ex, $("#f-err")); }
-    finally { btn.disabled = false; btn.textContent = S.editId ? "Guardar cambios" : "Guardar gasto"; if (btn.textContent === "Guardando…") btn.textContent = txt; }
+      const j = await api("add", { data });
+      nuevoId = (j.gastos || []).map((g) => g.id).find((id) => !antes.has(id)) || null;
+      if (deshecho && nuevoId) await api("delete", { id: nuevoId });
+    } catch (ex) {
+      gastos = gastos.filter((g) => g.id !== tmp.id); renderAll();
+      if (!deshecho) { rellenarForm(data); writeErr(ex, $("#f-err")); }
+    }
+  }
+
+  function rellenarForm(data) {
+    if (S.editId || $("#f-importe").value) return;
+    S.fCat = data.cat || S.fCat; S.fPaga = data.paga; S.fTipo = data.tipo === "personal" ? "personal" : "compartido";
+    S.fParte = data.tipo === "compartido" ? data.parteA : null; S.parteOpen = S.fParte != null && Math.abs(S.fParte - cfg.parteA) > 0.001;
+    S.catManual = true;
+    $("#f-importe").value = (data.cent / 100).toFixed(2).replace(".", ",");
+    $("#f-nota").value = data.nota || ""; $("#f-fecha").value = data.fecha || hoy();
+    renderForm();
+  }
+
+  async function guardarEdicion(id, data) {
+    const i = gastos.findIndex((g) => g.id === id);
+    const prev = i >= 0 ? gastos[i] : null;
+    if (prev) { gastos = gastos.slice(); gastos[i] = Object.assign({}, prev, data, { pend: true }); }
+    resetForm(); go("movimientos"); renderAll();
+    try { await api("update", { id, data }); toast("Cambios guardados"); }
+    catch (ex) {
+      if (prev) { const k = gastos.findIndex((g) => g.id === id); if (k >= 0) { gastos = gastos.slice(); gastos[k] = prev; } renderAll(); }
+      writeErr(ex);
+    }
   }
 
   async function borrar(id) {
-    try { await api("delete", { id }); toast("Gasto borrado"); return true; }
-    catch (ex) { writeErr(ex); return false; }
+    const g = gastos.find((x) => x.id === id); if (!g || g.pend) return false;
+    gastos = gastos.filter((x) => x.id !== id); renderAll();
+    const data = { fecha: g.fecha, cent: g.cent, cat: g.cat, paga: g.paga, tipo: g.tipo, parteA: g.parteA, nota: g.nota };
+    toast(g.tipo === "liquidacion" ? "Pago borrado" : "Gasto borrado", "Deshacer", async () => {
+      const copia = Object.assign({}, g, { id: "tmp-" + Date.now(), pend: true });
+      gastos = gastos.concat([copia]); renderAll();
+      try { await api("add", { data }); toast("Recuperado"); }
+      catch (ex) { gastos = gastos.filter((x) => x.id !== copia.id); renderAll(); writeErr(ex); }
+    });
+    try { await api("delete", { id }); return true; }
+    catch (ex) { if (!gastos.some((x) => x.id === id)) { gastos = gastos.concat([g]); renderAll(); } writeErr(ex); return false; }
+  }
+
+  function repetir() {
+    const id = S.editId; const g = gastos.find((x) => x.id === id); if (!g) return;
+    const data = { fecha: hoy(), cent: g.cent, cat: g.cat, paga: g.tipo === "personal" ? yo : g.paga, tipo: g.tipo, parteA: g.parteA, nota: g.nota };
+    resetForm(); rellenarForm(data);
+    $("#f-fecha").value = hoy();
+    $("#form-title").textContent = "Nuevo gasto (copia)";
+    window.scrollTo(0, 0); focoImporte();
   }
 
   async function saldar() {
     const bal = balance(); if (Math.abs(bal) < 1) return;
     const deudor = bal > 0 ? "B" : "A";
-    const b = $("#saldo-yes"); if (b) { b.disabled = true; b.textContent = "Guardando…"; }
-    try {
-      S.saldo = false;
-      await api("add", { data: { tipo: "liquidacion", paga: deudor, cent: Math.abs(bal), fecha: hoy(), cat: null, nota: "Saldar cuentas", parteA: null } });
-      toast("Cuentas saldadas");
-    } catch (ex) { writeErr(ex); renderRes(); }
+    const data = { tipo: "liquidacion", paga: deudor, cent: Math.abs(bal), fecha: hoy(), cat: null, nota: "Saldar cuentas", parteA: null };
+    const tmp = Object.assign({ id: "tmp-" + Date.now(), ts: Date.now(), pend: true }, data);
+    S.saldo = false; gastos = gastos.concat([tmp]); renderAll();
+    try { await api("add", { data }); toast("Cuentas saldadas"); }
+    catch (ex) { gastos = gastos.filter((g) => g.id !== tmp.id); renderAll(); writeErr(ex); }
   }
 
   async function guardarAjustes() {
@@ -1098,23 +1257,24 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     const t = e.target.closest("button"); if (!t) return;
     const d = t.dataset;
     if (d.go) return go(d.go);
-    if (d.sug !== undefined) { $("#f-nota").value = d.sug; renderSug(); return; }
-    if (d.cat) { S.fCat = d.cat; return renderForm(); }
+    if (d.sug !== undefined) { $("#f-nota").value = d.sug; renderSug(); autoCat(); return; }
+    if (d.cat) { S.fCat = d.cat; S.catManual = true; return renderForm(); }
     if (d.paga) { S.fPaga = d.paga; return renderForm(); }
     if (t.parentElement && t.parentElement.id === "f-tipo") { S.fTipo = d.v; return renderForm(); }
     if (t.parentElement && t.parentElement.id === "r-alcance") { S.alcance = d.v; return renderRes(); }
     if (d.filtro) { S.filtro = d.filtro; return renderMov(); }
+    if (d.quien) { S.quien = d.quien; return renderMov(); }
     if (d.mes) { S.mes = shiftMes(S.mes, Number(d.mes)); S.saldo = false; renderNav(); renderMov(); return renderRes(); }
     if (d.pick) { S.mes = d.pick; renderNav(); renderMov(); return renderRes(); }
     if (d.edit) return editar(d.edit);
-    if (d.liq) { S.delLiq = d.liq; return renderAll(); }
-    if (d.liqYes !== undefined) { const id = d.liqYes; S.delLiq = null; await borrar(id); return renderAll(); }
-    if (d.liqNo !== undefined) { S.delLiq = null; return renderAll(); }
+    if (d.liq) { await borrar(d.liq); return; }
     switch (t.id) {
       case "btn-cancel-edit": resetForm(); return go("movimientos");
-      case "btn-del": $("#del-confirm").hidden = false; return;
-      case "btn-del-no": $("#del-confirm").hidden = true; return;
-      case "btn-del-yes": { const id = S.editId; if (id && await borrar(id)) { resetForm(); go("movimientos"); } return; }
+      case "btn-del": { const id = S.editId; resetForm(); go("movimientos"); if (id) await borrar(id); return; }
+      case "btn-repetir": return repetir();
+      case "f-parte-go": S.parteOpen = true; S.fParte = parteForm(); return renderForm();
+      case "f-parte-reset": S.parteOpen = false; S.fParte = null; return renderForm();
+      case "toast-act": { const f = toastFn; clearTimeout(toastT); cerrarToast(); if (f) await f(); return; }
       case "saldo-go": S.saldo = true; return renderRes();
       case "saldo-no": S.saldo = false; return renderRes();
       case "saldo-yes": return saldar();
@@ -1131,12 +1291,14 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
       case "g-to-login": return modoGate(false);
       case "a-pin-go": $("#a-pin-form").hidden = false; t.hidden = true; setTimeout(() => $("#a-nuevo").focus(), 30); return;
       case "a-pin-cancel": $("#a-pin-form").hidden = true; $("#a-pin-go").hidden = false; $("#a-pin-err").hidden = true; return;
-      case "a-logout": store.set("cc-pin", ""); store.set("cc-quien", ""); pin = ""; yo = ""; ready = false; connected = false; gastos = []; resetForm(); S.view = "anadir"; try { location.hash = "anadir"; } catch (e) {} renderAll(); return showGate("");
+      case "a-logout": S.q = ""; $("#mv-q").value = ""; store.set("cc-pin", ""); store.set("cc-quien", ""); pin = ""; yo = ""; ready = false; connected = false; gastos = []; resetForm(); S.view = "anadir"; try { location.hash = "anadir"; } catch (e) {} renderAll(); return showGate("");
       case "who-chip": return go("ajustes");
     }
   });
   $("#form").addEventListener("submit", guardar);
-  $("#f-nota").addEventListener("input", renderSug);
+  $("#f-nota").addEventListener("input", () => { renderSug(); autoCat(); });
+  $("#f-parte").addEventListener("input", (e) => { S.fParte = Number(e.target.value) / 100; renderForm(); });
+  $("#mv-q").addEventListener("input", (e) => { S.q = e.target.value; renderMov(); });
   $("#g-form").addEventListener("submit", entrar);
   $("#g-alta").addEventListener("submit", altaSubmit);
   $("#a-pin-form").addEventListener("submit", cambiarPin);
