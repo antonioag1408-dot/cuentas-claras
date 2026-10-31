@@ -93,7 +93,8 @@ header.top {
 }
 header.top .wrap { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-block: 12px; }
 .brand { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-.brand b { font: 700 20px/1 var(--f-display); letter-spacing: -0.01em; }
+.brand b { font: 700 20px/1 var(--f-display); letter-spacing: -0.01em; white-space: nowrap; }
+@media (max-width: 440px) { .brand span { display: none; } }
 .brand span { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .who {
   border: 1px solid var(--line); background: var(--surface); border-radius: 999px;
@@ -179,6 +180,11 @@ input, select, textarea { max-width: 100%; }
 .btn.danger { color: var(--danger); border-color: var(--danger); background: transparent; }
 .btn.small { padding: 8px 12px; font-size: 14px; border-radius: 10px; }
 .btn:disabled { opacity: .5; cursor: default; }
+.nota-block { display: grid; gap: 8px; min-width: 0; }
+.sug { display: grid; gap: 6px; min-width: 0; }
+.sug-lbl { font-size: 12px; color: var(--muted); }
+.chip.sug-chip { padding: 7px 12px; font-size: 14px; gap: 6px; }
+.chip.sug-chip .n { font: 600 11px/1 var(--f-num); color: var(--muted); }
 .err { color: var(--danger); font-size: 14px; font-weight: 500; }
 .confirm {
   display: grid; gap: 10px; background: var(--danger-soft); border-radius: var(--r); padding: 12px 14px; font-size: 14px;
@@ -347,6 +353,13 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
           <legend>Categoría</legend>
           <div class="chips" id="f-cats"></div>
         </fieldset>
+        <div class="nota-block">
+          <label class="field" for="f-nota">Nota<input id="f-nota" maxlength="80" autocomplete="off" placeholder="Mercadona, cena, luz…"></label>
+          <div class="sug" id="f-sug-wrap" hidden>
+            <span class="sug-lbl" id="f-sug-lbl"></span>
+            <div class="chips scroll" id="f-sug"></div>
+          </div>
+        </div>
         <fieldset>
           <legend>Pagó</legend>
           <div class="seg" id="f-paga"></div>
@@ -359,10 +372,7 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
           </div>
           <p class="hint" id="f-reparto"></p>
         </fieldset>
-        <div class="row2">
-          <label class="field" for="f-fecha">Fecha<input type="date" id="f-fecha"></label>
-          <label class="field" for="f-nota">Nota<input id="f-nota" maxlength="80" placeholder="Mercadona, cena, luz…"></label>
-        </div>
+        <label class="field" for="f-fecha">Fecha<input type="date" id="f-fecha"></label>
         <p class="err" id="f-err" hidden></p>
         <button class="btn primary" type="submit" id="btn-guardar">Guardar gasto</button>
         <div id="del-zone" class="block" hidden>
@@ -721,6 +731,43 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     $("#btn-cancel-edit").hidden = !S.editId;
     $("#del-zone").hidden = !S.editId;
     $("#recent-block").hidden = !!S.editId;
+    renderSug();
+  }
+
+  /* Sugerencias de nota: las más usadas en la categoría elegida */
+  const normNota = (s) => String(s || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ");
+  function sugerencias(cat, q) {
+    const map = new Map();
+    for (const g of gastos) {
+      if (g.tipo === "liquidacion" || !g.nota) continue;
+      const k = normNota(g.nota); if (!k) continue;
+      let e = map.get(k);
+      if (!e) { e = { k, texto: g.nota.trim(), n: 0, nCat: 0, ts: -1 }; map.set(k, e); }
+      e.n++; if (g.cat === cat) e.nCat++;
+      const t = g.ts || 0; if (t >= e.ts) { e.ts = t; e.texto = g.nota.trim(); }
+    }
+    const qn = normNota(q);
+    let list = Array.from(map.values());
+    if (qn) {
+      list = list.filter((e) => e.k.includes(qn) && e.k !== qn);
+      list.sort((a, b) => (b.nCat > 0) - (a.nCat > 0) || b.k.startsWith(qn) - a.k.startsWith(qn) || b.nCat - a.nCat || b.n - a.n || b.ts - a.ts);
+    } else {
+      list = list.filter((e) => e.nCat > 0);
+      list.sort((a, b) => b.nCat - a.nCat || b.ts - a.ts);
+    }
+    return list.slice(0, 6);
+  }
+  function renderSug() {
+    const wrap = $("#f-sug-wrap");
+    const q = $("#f-nota").value;
+    const list = ready && S.fCat ? sugerencias(S.fCat, q) : [];
+    wrap.hidden = !list.length;
+    if (!list.length) { $("#f-sug").innerHTML = ""; return; }
+    $("#f-sug-lbl").textContent = q.trim() ? "Coincidencias" : "Más usadas en " + catOf(S.fCat).nombre;
+    $("#f-sug").innerHTML = list.map((e) => {
+      const n = q.trim() ? e.n : e.nCat;
+      return `<button type="button" class="chip sug-chip" data-sug="${esc(e.texto)}">${esc(e.texto)}${n > 1 ? `<span class="n">×${n}</span>` : ""}</button>`;
+    }).join("");
   }
 
   function emptyHTML(t, s) { return `<div class="empty"><b>${t}</b><span>${s}</span></div>`; }
@@ -993,6 +1040,7 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     const t = e.target.closest("button"); if (!t) return;
     const d = t.dataset;
     if (d.go) return go(d.go);
+    if (d.sug !== undefined) { $("#f-nota").value = d.sug; renderSug(); return; }
     if (d.cat) { S.fCat = d.cat; return renderForm(); }
     if (d.paga) { S.fPaga = d.paga; return renderForm(); }
     if (t.parentElement && t.parentElement.id === "f-tipo") { S.fTipo = d.v; return renderForm(); }
@@ -1027,6 +1075,7 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     }
   });
   $("#form").addEventListener("submit", guardar);
+  $("#f-nota").addEventListener("input", renderSug);
   $("#g-form").addEventListener("submit", entrar);
   ["#a-parte", "#a-nombreA", "#a-nombreB"].forEach((s) => $(s).addEventListener("input", () => {
     $$("#a-cats input").forEach((inp) => { draft.cats[Number(inp.dataset.i)].nombre = inp.value; });
