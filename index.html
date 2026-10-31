@@ -278,6 +278,7 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 0; width: 100%; }
 .gate { display: grid; gap: 14px; padding-top: 24px; }
 .gate .card { gap: 14px; }
 .gate input { font: 600 20px/1.2 var(--f-num); letter-spacing: .08em; }
+.gate .link, #a-pin-form .link { justify-self: center; }
 a.btn { text-decoration: none; }
 .sync { font-size: 12px; color: var(--muted); }
 
@@ -322,12 +323,22 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
 
     <!-- ACCESO -->
     <section class="gate" id="gate" hidden>
-      <h1>Entrar</h1>
+      <h1 id="g-title">Entrar</h1>
       <p class="hint" id="g-intro">Escribe tu PIN. Cada uno tiene el suyo: con él la app sabe quién eres y te enseña tus gastos personales. Solo hace falta una vez en cada dispositivo.</p>
       <form class="card" id="g-form" novalidate>
         <label class="field" for="g-pin">PIN<input id="g-pin" type="password" autocomplete="current-password" maxlength="64"></label>
         <p class="err" id="g-err" hidden></p>
         <button class="btn primary" type="submit" id="g-btn">Entrar</button>
+        <button type="button" class="link" id="g-to-alta">¿Primera vez? Tengo un código de alta</button>
+      </form>
+      <form class="card" id="g-alta" hidden novalidate>
+        <label class="field" for="g-codigo">Código de alta (6 cifras)<input id="g-codigo" inputmode="numeric" autocomplete="one-time-code" maxlength="7"></label>
+        <label class="field" for="g-nuevo">Elige tu PIN<input id="g-nuevo" type="password" autocomplete="new-password" maxlength="64"></label>
+        <label class="field" for="g-nuevo2">Repite el PIN<input id="g-nuevo2" type="password" autocomplete="new-password" maxlength="64"></label>
+        <p class="hint">Mínimo 6 caracteres. Solo lo sabrás tú; ni siquiera queda escrito en la hoja.</p>
+        <p class="err" id="g-alta-err" hidden></p>
+        <button class="btn primary" type="submit" id="g-alta-btn">Crear mi PIN</button>
+        <button type="button" class="link" id="g-to-login">Ya tengo PIN</button>
       </form>
     </section>
 
@@ -466,6 +477,16 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
       <div class="block">
         <h3>Sesión</h3>
         <p class="hint" id="a-sesion"></p>
+        <button type="button" class="btn" id="a-pin-go">Cambiar mi PIN</button>
+        <form class="card" id="a-pin-form" hidden novalidate>
+          <label class="field" for="a-nuevo">PIN nuevo<input id="a-nuevo" type="password" autocomplete="new-password" maxlength="64"></label>
+          <label class="field" for="a-nuevo2">Repite el PIN nuevo<input id="a-nuevo2" type="password" autocomplete="new-password" maxlength="64"></label>
+          <p class="err" id="a-pin-err" hidden></p>
+          <div class="acts" style="display:flex;gap:8px;flex-wrap:wrap">
+            <button type="submit" class="btn small" id="a-pin-save" style="background:var(--accent);color:var(--accent-ink);border-color:var(--accent)">Guardar PIN</button>
+            <button type="button" class="btn small" id="a-pin-cancel">Cancelar</button>
+          </div>
+        </form>
         <button type="button" class="btn" id="a-logout">Cerrar sesión en este dispositivo</button>
       </div>
     </section>
@@ -583,16 +604,16 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
   function errMsg(ex) {
     switch (ex && ex.error) {
       case "network": return "Sin conexión. Comprueba internet y vuelve a intentarlo.";
-      case "pin": return "PIN incorrecto.";
+      case "pin": return ex.primeraVez ? "PIN incorrecto. Si es tu primera vez, pulsa «¿Primera vez?» y usa tu código de alta." : "PIN incorrecto.";
+      case "alta": return "Código de alta incorrecto o ya usado. Pide uno nuevo a quien gestiona la hoja.";
       case "locked": return "Demasiados intentos con un PIN incorrecto. Espera 15 minutos.";
-      case "pin_default": return "Falta cambiar el PIN en el script de Google (línea const PIN) y volver a implementarlo.";
       case "busy": return "La hoja está ocupada. Vuelve a intentarlo en unos segundos.";
       case "invalid": case "not_found": return ex.message || "Datos no válidos.";
       case "config": return "Falta la dirección del script en index.html (API_URL).";
       default: return "Error del script de Google" + (ex && ex.message ? ": " + ex.message : ". Vuelve a intentarlo.");
     }
   }
-  const esAuth = (ex) => ex && ["pin", "locked", "pin_default"].includes(ex.error);
+  const esAuth = (ex) => ex && ["pin", "locked"].includes(ex.error);
   function writeErr(ex, where) {
     if (esAuth(ex)) return showGate(errMsg(ex));
     const msg = errMsg(ex);
@@ -609,7 +630,7 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
         res = await fetch(API_URL, {
           method: "POST",
           headers: { "Content-Type": "text/plain;charset=utf-8" },
-          body: JSON.stringify(Object.assign({ pin, action }, extra || {}))
+          body: JSON.stringify(Object.assign({ pin, action, quien: store.get("cc-quien") || "" }, extra || {}))
         });
       } catch (e) { throw { error: "network" }; }
       let j;
@@ -625,6 +646,7 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     sheetUrl = typeof j.sheetUrl === "string" ? j.sheetUrl : "";
     const antes = yo;
     yo = j.yo === "B" ? "B" : "A";
+    store.set("cc-quien", yo);
     if (!S.editId && antes !== yo) S.fPaga = yo;
     ready = true; connected = true; lastSync = Date.now();
     if (S.editId && !gastos.some((g) => g.id === S.editId)) resetForm();
@@ -640,15 +662,59 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
       else if (!silencioso || !ready) banner(errMsg(ex));
     }
   }
+  function modoGate(alta) {
+    $("#g-form").hidden = alta; $("#g-alta").hidden = !alta;
+    $("#g-title").textContent = alta ? "Primera vez" : "Entrar";
+    $("#g-intro").textContent = alta
+      ? "Escribe el código de alta de 6 cifras que te han dado y elige tu PIN. El código solo sirve una vez."
+      : "Escribe tu PIN. Cada uno tiene el suyo: con él la app sabe quién eres y te enseña tus gastos personales. Solo hace falta una vez en cada dispositivo.";
+    setTimeout(() => { try { $(alta ? "#g-codigo" : "#g-pin").focus(); } catch (x) {} }, 50);
+  }
+  async function altaSubmit(ev) {
+    ev.preventDefault();
+    const err = $("#g-alta-err"); const fail = (m) => { err.textContent = m; err.hidden = false; };
+    err.hidden = true;
+    const codigo = $("#g-codigo").value.replace(/\D/g, "");
+    const n1 = $("#g-nuevo").value, n2 = $("#g-nuevo2").value;
+    if (codigo.length !== 6) return fail("El código de alta tiene 6 cifras.");
+    if (n1.length < 6) return fail("El PIN debe tener al menos 6 caracteres.");
+    if (n1 !== n2) return fail("Los dos PIN no coinciden.");
+    const b = $("#g-alta-btn"); b.disabled = true; b.textContent = "Creando…";
+    pin = "";
+    try {
+      await api("alta", { codigo, nuevo: n1 });
+      pin = n1; store.set("cc-pin", pin);
+      $("#gate").hidden = true; ["#g-codigo", "#g-nuevo", "#g-nuevo2"].forEach((s) => ($(s).value = ""));
+      modoGate(false); renderAll();
+      toast("PIN creado. Hola, " + nombre(yo));
+    } catch (ex) { fail(errMsg(ex)); }
+    finally { b.disabled = false; b.textContent = "Crear mi PIN"; }
+  }
+  async function cambiarPin(ev) {
+    ev.preventDefault();
+    const err = $("#a-pin-err"); const fail = (m) => { err.textContent = m; err.hidden = false; };
+    err.hidden = true;
+    const n1 = $("#a-nuevo").value, n2 = $("#a-nuevo2").value;
+    if (n1.length < 6) return fail("El PIN debe tener al menos 6 caracteres.");
+    if (n1 !== n2) return fail("Los dos PIN no coinciden.");
+    const b = $("#a-pin-save"); b.disabled = true;
+    try {
+      await api("cambiarPin", { nuevo: n1 });
+      pin = n1; store.set("cc-pin", pin);
+      $("#a-pin-form").hidden = true; $("#a-pin-go").hidden = false; $("#a-nuevo").value = ""; $("#a-nuevo2").value = "";
+      toast("PIN cambiado");
+    } catch (ex) { if (esAuth(ex)) showGate(errMsg(ex)); else fail(errMsg(ex)); }
+    finally { b.disabled = false; }
+  }
   function showGate(msg) {
     connected = false;
     $("#gate").hidden = false;
+    modoGate(false);
     const e = $("#g-err"); e.textContent = msg || ""; e.hidden = !msg;
     const sinUrl = !API_URL;
     $("#g-pin").disabled = sinUrl; $("#g-btn").disabled = sinUrl;
     if (sinUrl) { e.textContent = errMsg({ error: "config" }); e.hidden = false; }
     renderNav();
-    if (!sinUrl) setTimeout(() => { try { $("#g-pin").focus(); } catch (x) {} }, 50);
   }
   async function entrar(ev) {
     ev.preventDefault();
@@ -1061,13 +1127,19 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
       }
       case "a-guardar": return guardarAjustes();
       case "a-export": return exportar();
-      case "a-logout": store.set("cc-pin", ""); pin = ""; yo = ""; ready = false; connected = false; gastos = []; resetForm(); S.view = "anadir"; try { location.hash = "anadir"; } catch (e) {} renderAll(); return showGate("");
+      case "g-to-alta": return modoGate(true);
+      case "g-to-login": return modoGate(false);
+      case "a-pin-go": $("#a-pin-form").hidden = false; t.hidden = true; setTimeout(() => $("#a-nuevo").focus(), 30); return;
+      case "a-pin-cancel": $("#a-pin-form").hidden = true; $("#a-pin-go").hidden = false; $("#a-pin-err").hidden = true; return;
+      case "a-logout": store.set("cc-pin", ""); store.set("cc-quien", ""); pin = ""; yo = ""; ready = false; connected = false; gastos = []; resetForm(); S.view = "anadir"; try { location.hash = "anadir"; } catch (e) {} renderAll(); return showGate("");
       case "who-chip": return go("ajustes");
     }
   });
   $("#form").addEventListener("submit", guardar);
   $("#f-nota").addEventListener("input", renderSug);
   $("#g-form").addEventListener("submit", entrar);
+  $("#g-alta").addEventListener("submit", altaSubmit);
+  $("#a-pin-form").addEventListener("submit", cambiarPin);
   ["#a-parte", "#a-nombreA", "#a-nombreB"].forEach((s) => $(s).addEventListener("input", () => {
     $$("#a-cats input").forEach((inp) => { draft.cats[Number(inp.dataset.i)].nombre = inp.value; });
     renderAjustes();
