@@ -385,10 +385,6 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
           <h1 id="form-title">Nuevo gasto</h1>
           <button type="button" class="link" id="btn-cancel-edit" hidden>Cancelar</button>
         </div>
-        <div class="seg" id="f-modo">
-          <button type="button" data-modo="gasto">Gasto</button>
-          <button type="button" data-modo="ingreso">Ingreso</button>
-        </div>
         <p class="hint" id="f-fijo-hint" hidden></p>
         <label class="amount" for="f-importe">
           <span class="sr">Importe en euros</span>
@@ -515,6 +511,14 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
       <button type="button" class="btn primary" id="a-guardar">Guardar ajustes</button>
       <hr>
       <div class="block">
+        <h3>Mis ingresos fijos</h3>
+        <p class="hint">Tu nómina u otros ingresos que cobras cada mes. Se apuntan solos el día de cobro y solo los ves tú. Si un mes cobras distinto, edítalo en Movimientos → Ingresos.</p>
+        <div id="a-ingfijos"></div>
+        <button type="button" class="btn small" id="a-ing-nuevo">Añadir ingreso fijo</button>
+        <div id="a-ing-slot"></div>
+      </div>
+      <hr>
+      <div class="block">
         <h3>Gastos fijos</h3>
         <p class="hint">Renta, luz, internet… Cada mes aparecen en Añadir para apuntarlos con un toque. Los personales solo los ves tú.</p>
         <div id="a-fijos"></div>
@@ -522,13 +526,13 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
         <button type="button" class="btn small" id="a-fijo-nuevo">Añadir gasto fijo</button>
         <form class="card" id="a-fijo-form" hidden novalidate>
           <label class="field" for="fx-nombre">Nombre<input id="fx-nombre" maxlength="40" autocomplete="off"></label>
-          <label class="check" for="fx-variable"><input type="checkbox" id="fx-variable"> El importe cambia cada mes (luz, agua…)</label>
+          <label class="check" for="fx-variable" id="fx-variable-wrap"><input type="checkbox" id="fx-variable"> El importe cambia cada mes (luz, agua…)</label>
           <div class="row2">
             <label class="field" for="fx-importe"><span id="fx-importe-lbl">Importe (€)</span><input id="fx-importe" inputmode="decimal" autocomplete="off"></label>
-            <label class="field" for="fx-dia">Día del mes en que se paga<input id="fx-dia" type="number" min="1" max="31" inputmode="numeric"></label>
+            <label class="field" for="fx-dia"><span id="fx-dia-lbl">Día del mes en que se paga</span><input id="fx-dia" type="number" min="1" max="31" inputmode="numeric"></label>
           </div>
           <label class="field" for="fx-cat">Categoría<select id="fx-cat"></select></label>
-          <span class="lbl">Tipo</span>
+          <span class="lbl" id="fx-tipo-lbl">Tipo</span>
           <div class="seg small" id="fx-tipo">
             <button type="button" data-fxtipo="compartido">Compartido</button>
             <button type="button" data-fxtipo="personal">Personal</button>
@@ -877,8 +881,6 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     const ing = S.modo === "ingreso";
     const cats = listaCats();
     if (!S.fCat || !cats.some((c) => c.id === S.fCat)) S.fCat = cats[0] ? cats[0].id : null;
-    $$("#f-modo button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.modo === S.modo)));
-    $("#f-modo").hidden = !!S.editId || !!S.fFijo;
     $("#f-tipo-fs").hidden = ing;
     $("#f-nota").placeholder = ing ? "Nómina, extra, devolución…" : "Mercadona, cena, luz…";
     const fj = S.fFijo ? fijos.find((f) => f.id === S.fFijo) : null;
@@ -905,9 +907,9 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
       $("#f-parte-a").textContent = `${nombre("A")} ${Math.round(p * 100)} %`;
       $("#f-parte-b").textContent = `${nombre("B")} ${Math.round((1 - p) * 100)} %`;
     }
-    $("#form-title").textContent = S.editId ? (ing ? "Editar ingreso" : "Editar gasto") : fj ? "Apuntar " + fj.nombre : (ing ? "Nuevo ingreso" : "Nuevo gasto");
+    $("#form-title").textContent = S.editId ? (ing ? "Editar ingreso" : "Editar gasto") : fj ? "Apuntar " + fj.nombre : (ing ? "Nuevo ingreso extra" : "Nuevo gasto");
     $("#btn-guardar").textContent = S.editId ? "Guardar cambios" : (ing ? "Guardar ingreso" : "Guardar gasto");
-    $("#btn-cancel-edit").hidden = !S.editId;
+    $("#btn-cancel-edit").hidden = !S.editId && !ing && !fj;
     $("#del-zone").hidden = !S.editId;
     $("#recent-block").hidden = !!S.editId;
     renderFijosCard();
@@ -979,8 +981,8 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
   function miParteDe(cent, tipo, parteA) { return tipo === "personal" ? cent : Math.round(cent * ((yo || "A") === "A" ? parteA : 1 - parteA)); }
   function renderFijosCard() {
     const card = $("#fijos-card");
-    const activos = fijos.filter((f) => f.activo);
-    if (!ready || !activos.length || S.editId || S.fFijo) { card.hidden = true; return; }
+    const activos = fijos.filter((f) => f.activo && f.tipo !== "ingreso");
+    if (!ready || !activos.length || S.editId || S.fFijo || S.modo === "ingreso") { card.hidden = true; return; }
     const m = mesActual(), hoyD = new Date().getDate();
     const pend = activos.filter((f) => !apuntadoEn(f, m)).sort((a, b) => a.dia - b.dia);
     const hechos = activos.filter((f) => apuntadoEn(f, m));
@@ -1021,7 +1023,14 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     { nombre: "Internet", variable: false, dia: 5 }, { nombre: "Móvil", variable: false, dia: 5, tipo: "personal" }
   ];
   function renderFijosAjustes() {
-    const lista = fijos.slice().sort((a, b) => (b.activo - a.activo) || a.dia - b.dia);
+    const ingF = fijos.filter((f) => f.tipo === "ingreso").sort((a, b) => (b.activo - a.activo) || a.dia - b.dia);
+    $("#a-ingfijos").innerHTML = ingF.length
+      ? `<div class="list">${ingF.map((f) => `<button type="button" class="row" data-fx-edit="${esc(f.id)}"${f.activo ? "" : ' style="opacity:.6"'}><span class="dot" style="background:var(--good)"></span>
+          <span class="main"><div class="t">${esc(f.nombre)}</div><div class="s">${esc(["Se apunta el día " + f.dia, catOf(f.cat).nombre, f.activo ? "" : "Pausado"].filter(Boolean).join(" · "))}</div></span>
+          <span class="amt ing">+${eur(f.cent)}</span></button>`).join("")}</div>`
+      : `<p class="hint">Aún no has añadido tu nómina.</p>`;
+    $("#a-ing-nuevo").hidden = !!S.fxEdit;
+    const lista = fijos.filter((f) => f.tipo !== "ingreso").sort((a, b) => (b.activo - a.activo) || a.dia - b.dia);
     $("#a-fijos").innerHTML = lista.length
       ? `<div class="list">${lista.map((f) => {
           const c = catOf(f.cat);
@@ -1037,12 +1046,18 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     $("#a-fijo-nuevo").hidden = !!S.fxEdit;
     $("#a-fijo-form").hidden = !S.fxEdit;
     if (S.fxEdit) {
+      const esIng = S.fxTipo === "ingreso";
+      const form = $("#a-fijo-form");
+      if (esIng && form.parentElement.id !== "a-ing-slot") $("#a-ing-slot").appendChild(form);
+      if (!esIng && form.previousElementSibling !== $("#a-fijo-nuevo")) $("#a-fijo-nuevo").after(form);
+      $("#fx-variable-wrap").hidden = esIng; $("#fx-tipo-lbl").hidden = esIng; $("#fx-tipo").hidden = esIng;
+      $("#fx-dia-lbl").textContent = esIng ? "Día de cobro" : "Día del mes en que se paga";
       $$("#fx-tipo button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.fxtipo === S.fxTipo)));
-      $("#fx-paga-wrap").hidden = S.fxTipo === "personal";
+      $("#fx-paga-wrap").hidden = S.fxTipo !== "compartido";
       $("#fx-paga").innerHTML = ["A", "B"].map((p) => `<button type="button" data-fxpaga="${p}" aria-pressed="${S.fxPaga === p}">${esc(nombre(p))}</button>`).join("");
-      $("#fx-importe-lbl").textContent = $("#fx-variable").checked ? "Importe aproximado (opcional)" : "Importe (€)";
+      $("#fx-importe-lbl").textContent = !esIng && $("#fx-variable").checked ? "Importe aproximado (opcional)" : "Importe (€)";
       $("#fx-borrar").hidden = S.fxEdit === "nuevo";
-      $("#fx-borrar").textContent = S.fxBorrar ? "Pulsa otra vez para borrarlo" : "Borrar este gasto fijo";
+      $("#fx-borrar").textContent = S.fxBorrar ? "Pulsa otra vez para borrarlo" : (esIng ? "Borrar este ingreso fijo" : "Borrar este gasto fijo");
     }
   }
   function abrirFijo(f) {
@@ -1052,9 +1067,10 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     $("#fx-variable").checked = !!(f && f.variable);
     $("#fx-importe").value = f && f.cent ? (f.cent / 100).toFixed(2).replace(".", ",") : "";
     $("#fx-dia").value = (f && f.dia) || 1;
-    $("#fx-cat").innerHTML = cfg.cats.map((c) => `<option value="${esc(c.id)}">${esc(c.nombre)}</option>`).join("");
-    $("#fx-cat").value = (f && f.cat && cfg.cats.some((c) => c.id === f.cat)) ? f.cat : (vivienda ? vivienda.id : cfg.cats[0].id);
     S.fxTipo = (f && f.tipo) || "compartido"; S.fxPaga = (f && f.paga) || yo || "A";
+    const catsFx = S.fxTipo === "ingreso" ? CATS_ING : cfg.cats;
+    $("#fx-cat").innerHTML = catsFx.map((c) => `<option value="${esc(c.id)}">${esc(c.nombre)}</option>`).join("");
+    $("#fx-cat").value = (f && f.cat && catsFx.some((c) => c.id === f.cat)) ? f.cat : (S.fxTipo === "ingreso" ? "nomina" : (vivienda ? vivienda.id : cfg.cats[0].id));
     $("#fx-activo").checked = f && f.activo === false ? false : true;
     $("#fx-err").hidden = true;
     renderFijosAjustes();
@@ -1069,24 +1085,25 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     const txt = $("#fx-importe").value.trim();
     const v = txt ? parseImporte(txt) : 0;
     const dia = Number($("#fx-dia").value);
-    if (!nombreF) return fail("Ponle un nombre, por ejemplo «Alquiler».");
+    const esIng = S.fxTipo === "ingreso";
+    if (!nombreF) return fail(esIng ? "Ponle un nombre, por ejemplo «Nómina»." : "Ponle un nombre, por ejemplo «Alquiler».");
     if (txt && !(v >= 0)) return fail("El importe no es válido. Escríbelo como 650 o 45,20.");
-    if (!variable && !(v > 0)) return fail("Escribe el importe, o marca que cambia cada mes.");
+    if ((esIng || !variable) && !(v > 0)) return fail(esIng ? "Escribe el importe que cobras." : "Escribe el importe, o marca que cambia cada mes.");
     if (!(dia >= 1 && dia <= 31)) return fail("El día debe estar entre 1 y 31.");
-    const data = { id: S.fxEdit === "nuevo" ? "" : S.fxEdit, nombre: nombreF, cent: Math.round((v || 0) * 100), variable, dia: Math.round(dia),
+    const data = { id: S.fxEdit === "nuevo" ? "" : S.fxEdit, nombre: nombreF, cent: Math.round((v || 0) * 100), variable: esIng ? false : variable, dia: Math.round(dia),
       cat: $("#fx-cat").value, tipo: S.fxTipo, paga: S.fxPaga, parteA: cfg.parteA, activo: $("#fx-activo").checked };
     const prev = S.fxEdit === "nuevo" ? null : fijos.find((f) => f.id === S.fxEdit);
     if (prev && prev.tipo === "compartido") data.parteA = prev.parteA;
     const b = $("#fx-guardar"); b.disabled = true; b.textContent = "Guardando…";
-    try { await api("fijoGuardar", { data }); S.fxEdit = null; renderFijosAjustes(); toast("Gasto fijo guardado"); }
+    try { await api("fijoGuardar", { data }); S.fxEdit = null; renderFijosAjustes(); toast(esIng ? "Ingreso fijo guardado. Se apuntará solo cada mes." : "Gasto fijo guardado"); }
     catch (ex) { if (esAuth(ex)) showGate(errMsg(ex)); else fail(errMsg(ex)); }
     finally { b.disabled = false; b.textContent = "Guardar"; }
   }
   async function borrarFijo() {
     if (!S.fxBorrar) { S.fxBorrar = true; return renderFijosAjustes(); }
-    const id = S.fxEdit; S.fxEdit = null; S.fxBorrar = false;
+    const id = S.fxEdit; const eraIng = S.fxTipo === "ingreso"; S.fxEdit = null; S.fxBorrar = false;
     fijos = fijos.filter((f) => f.id !== id); renderFijosAjustes(); renderForm();
-    try { await api("fijoBorrar", { id }); toast("Gasto fijo borrado. Los gastos ya apuntados se conservan."); }
+    try { await api("fijoBorrar", { id }); toast(eraIng ? "Ingreso fijo borrado. Los meses ya apuntados se conservan." : "Gasto fijo borrado. Los gastos ya apuntados se conservan."); }
     catch (ex) { writeErr(ex); }
   }
 
@@ -1101,10 +1118,12 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     const pers = delMes.filter((g) => g.tipo === "personal").reduce((a, g) => a + g.cent, 0);
     const gasto = parteComp + pers;
     const ahorro = ingresos - gasto;
-    const pendientes = esActual ? fijos.filter((f) => f.activo && !apuntadoEn(f, m)).reduce((a, f) => a + miParteDe(estimado(f) || 0, f.tipo, f.parteA), 0) : 0;
+    const pendientes = esActual ? fijos.filter((f) => f.activo && f.tipo !== "ingreso" && !apuntadoEn(f, m)).reduce((a, f) => a + miParteDe(estimado(f) || 0, f.tipo, f.parteA), 0) : 0;
+    const previstosL = esActual ? fijos.filter((f) => f.activo && f.tipo === "ingreso" && !apuntadoEn(f, m)) : [];
+    const previstos = previstosL.reduce((a, f) => a + f.cent, 0);
     const vivienda = delMes.filter((g) => g.cat === "vivienda" && (g.tipo === "compartido" || g.tipo === "personal"))
       .reduce((a, g) => a + (g.tipo === "personal" ? g.cent : miParteDe(g.cent, "compartido", parteDe(g))), 0);
-    if (!ingresos && !gasto && !pendientes) { el.hidden = true; return; }
+    if (!ingresos && !gasto && !pendientes && !previstos) { el.hidden = true; return; }
     const fila = (k, v, cls) => `<span${cls ? ` class="${cls}"` : ""}>${k}</span><span class="v${cls ? " " + cls : ""}">${v}</span>`;
     let html = `<h3>Mi mes · ${esc(nombre(yo))}</h3><div class="kv">`;
     html += fila("Ingresos", ingresos ? `<span class="pos">+${eur(ingresos)}</span>` : "—");
@@ -1113,16 +1132,18 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     if (ingresos) {
       const tasa = Math.round((ahorro / ingresos) * 100);
       html += fila(ahorro >= 0 ? `Ahorro (${tasa} % de tus ingresos)` : "Has gastado más de lo que ha entrado", (ahorro >= 0 ? "" : "−") + eur(Math.abs(ahorro)), "tot");
-      if (pendientes) {
-        const libre = ahorro - pendientes;
-        html += fila("Fijos pendientes (tu parte)", "−" + eur(pendientes));
-        html += fila("Libre hasta fin de mes", (libre >= 0 ? "" : "−") + eur(Math.abs(libre)), "tot");
-      }
-    } else if (pendientes) html += fila("Fijos pendientes (tu parte)", "−" + eur(pendientes));
+    }
+    previstosL.forEach((f) => { html += fila(`${esc(f.nombre)} (llega el día ${f.dia})`, `<span class="pos">+${eur(f.cent)}</span>`); });
+    if (pendientes) html += fila("Fijos pendientes (tu parte)", "−" + eur(pendientes));
+    if ((ingresos || previstos) && (pendientes || previstos)) {
+      const libre = ahorro + previstos - pendientes;
+      html += fila("Libre hasta fin de mes", (libre >= 0 ? "" : "−") + eur(Math.abs(libre)), "tot");
+    }
     html += `</div>`;
-    if (ingresos && vivienda) html += `<p class="hint">Vivienda y servicios: ${Math.round((vivienda / ingresos) * 100)} % de tus ingresos.</p>`;
-    if (!ingresos) html += `<p class="hint">Apunta tus ingresos (Añadir → Ingreso) para ver cuánto ahorras.</p>`;
-    html += `<p class="hint">Solo lo ves tú.</p>`;
+    const base = ingresos + previstos;
+    if (base && vivienda) html += `<p class="hint">Vivienda y servicios: ${Math.round((vivienda / base) * 100)} % de tus ingresos.</p>`;
+    if (!ingresos && !previstos) html += `<p class="hint">Añade tu nómina en Ajustes → Mis ingresos fijos para ver cuánto ahorras.</p>`;
+    html += `<p class="hint">Solo lo ves tú. <button type="button" class="inline-link" id="mm-extra">+ Ingreso extra</button></p>`;
     el.innerHTML = html; el.hidden = false;
   }
 
@@ -1531,7 +1552,6 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     if (d.filtro) { S.filtro = d.filtro; return renderMov(); }
     if (d.quien) { S.quien = d.quien; return renderMov(); }
     if (d.tipo) { if (S.tipo !== d.tipo) S.filtro = "all"; S.tipo = d.tipo; return renderMov(); }
-    if (d.modo) { if (S.modo !== d.modo) { S.modo = d.modo; S.fCat = null; S.catManual = false; S.fParte = null; S.parteOpen = false; } renderForm(); return focoImporte(); }
     if (d.fijoApuntar) return apuntarFijo(d.fijoApuntar);
     if (d.fxEdit) return abrirFijo(fijos.find((f) => f.id === d.fxEdit));
     if (d.fxAtajo) { const a = ATAJOS.find((x) => x.nombre === d.fxAtajo); return abrirFijo({ nombre: a.nombre, variable: a.variable, dia: a.dia, tipo: a.tipo || "compartido" }); }
@@ -1542,7 +1562,9 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     if (d.edit) return editar(d.edit);
     if (d.liq) { await borrar(d.liq); return; }
     switch (t.id) {
-      case "btn-cancel-edit": resetForm(); return go("movimientos");
+      case "btn-cancel-edit": if (!S.editId) { resetForm(); return; } resetForm(); return go("movimientos");
+      case "mm-extra": resetForm(); S.modo = "ingreso"; S.view = "anadir"; try { location.hash = "anadir"; } catch (e) {} renderAll(); window.scrollTo(0, 0); return focoImporte();
+      case "a-ing-nuevo": return abrirFijo({ tipo: "ingreso", nombre: "Nómina", dia: 1, cat: "nomina" });
       case "btn-del": { const id = S.editId; resetForm(); go("movimientos"); if (id) await borrar(id); return; }
       case "btn-repetir": return repetir();
       case "a-fijo-nuevo": return abrirFijo(null);
