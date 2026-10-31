@@ -323,7 +323,7 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     <!-- ACCESO -->
     <section class="gate" id="gate" hidden>
       <h1>Entrar</h1>
-      <p class="hint" id="g-intro">Escribe el PIN que pusisteis en el script de Google. Solo hace falta una vez en cada dispositivo.</p>
+      <p class="hint" id="g-intro">Escribe tu PIN. Cada uno tiene el suyo: con él la app sabe quién eres y te enseña tus gastos personales. Solo hace falta una vez en cada dispositivo.</p>
       <form class="card" id="g-form" novalidate>
         <label class="field" for="g-pin">PIN<input id="g-pin" type="password" autocomplete="current-password" maxlength="64"></label>
         <p class="err" id="g-err" hidden></p>
@@ -333,12 +333,6 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
 
     <!-- AÑADIR -->
     <section data-view="anadir" id="v-anadir">
-      <div class="card" id="who-prompt" hidden>
-        <p><strong>¿Quién usa este dispositivo?</strong></p>
-        <p class="hint">Así se marca por defecto quién paga cada gasto. Se puede cambiar en Ajustes.</p>
-        <div class="seg" id="who-seg"></div>
-      </div>
-
       <form id="form" class="block" novalidate>
         <div class="form-head">
           <h1 id="form-title">Nuevo gasto</h1>
@@ -360,7 +354,7 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
             <div class="chips scroll" id="f-sug"></div>
           </div>
         </div>
-        <fieldset>
+        <fieldset id="f-paga-fs">
           <legend>Pagó</legend>
           <div class="seg" id="f-paga"></div>
         </fieldset>
@@ -413,7 +407,8 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
         <button type="button" data-mes="1" aria-label="Mes siguiente">›</button>
       </div>
       <div class="seg small" id="r-alcance">
-        <button type="button" data-v="comp">Solo compartidos</button>
+        <button type="button" data-v="comp">Compartidos</button>
+        <button type="button" data-v="pers">Personales</button>
         <button type="button" data-v="todo">Todo</button>
       </div>
       <div class="hero">
@@ -461,12 +456,6 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
       <button type="button" class="btn primary" id="a-guardar">Guardar ajustes</button>
       <hr>
       <div class="block">
-        <h3>En este dispositivo soy</h3>
-        <div class="seg" id="a-yo"></div>
-        <p class="hint">Solo afecta a este móvil u ordenador: marca quién paga por defecto.</p>
-      </div>
-      <hr>
-      <div class="block">
         <h3>Vuestros datos</h3>
         <p class="hint">Todo se guarda en vuestra hoja de Google Sheets. Puedes abrirla, filtrarla o hacer gráficos allí.</p>
         <a class="btn" id="a-sheet" href="#" target="_blank" rel="noopener" hidden>Abrir la hoja de Google</a>
@@ -475,8 +464,9 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
       </div>
       <hr>
       <div class="block">
-        <h3>Este dispositivo</h3>
-        <button type="button" class="btn" id="a-logout">Olvidar el PIN aquí</button>
+        <h3>Sesión</h3>
+        <p class="hint" id="a-sesion"></p>
+        <button type="button" class="btn" id="a-logout">Cerrar sesión en este dispositivo</button>
       </div>
     </section>
   </div>
@@ -523,6 +513,7 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
   let gastos = [];
   let ready = false, connected = false, sheetUrl = "", lastSync = 0;
   let pin = "";
+  let yo = "";  // "A" o "B": lo dice el script de Google según el PIN
   let seqSent = 0, seqApplied = 0, inflight = 0;
   let draft = null; // borrador de ajustes mientras se editan
 
@@ -533,7 +524,7 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
 
   const S = {
     view: "anadir", mes: ym(new Date()), filtro: "all", alcance: "comp",
-    editId: null, fCat: null, fPaga: store.get("cc-yo") || "A", fTipo: "compartido",
+    editId: null, fCat: null, fPaga: "A", fTipo: "compartido",
     saldo: false, delLiq: null
   };
 
@@ -567,7 +558,7 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
   /* ---------- cálculos ---------- */
   const enMes = (g, m) => typeof g.fecha === "string" && g.fecha.slice(0, 7) === m;
   const esGasto = (g) => g.tipo !== "liquidacion";
-  const cuenta = (g) => esGasto(g) && (S.alcance === "todo" || g.tipo === "compartido");
+  const cuenta = (g) => esGasto(g) && (S.alcance === "todo" || (S.alcance === "pers" ? g.tipo === "personal" : g.tipo === "compartido"));
   const totalMes = (m) => gastos.filter((g) => enMes(g, m) && cuenta(g)).reduce((a, g) => a + (g.cent || 0), 0);
 
   // > 0: la persona 2 debe esa cantidad a la persona 1; < 0: al revés
@@ -632,6 +623,9 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     cfg = normCfg(j.cfg);
     gastos = Array.isArray(j.gastos) ? j.gastos : [];
     sheetUrl = typeof j.sheetUrl === "string" ? j.sheetUrl : "";
+    const antes = yo;
+    yo = j.yo === "B" ? "B" : "A";
+    if (!S.editId && antes !== yo) S.fPaga = yo;
     ready = true; connected = true; lastSync = Date.now();
     if (S.editId && !gastos.some((g) => g.id === S.editId)) resetForm();
     if (S.view !== "ajustes") fillAjustes();
@@ -704,12 +698,9 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
   }
 
   function renderWho() {
-    const yo = store.get("cc-yo");
     const chip = $("#who-chip");
-    chip.hidden = !yo; chip.textContent = yo ? "Eres " + nombre(yo) : "";
-    $("#who-prompt").hidden = !!yo || !!S.editId;
-    const seg = ["A", "B"].map((p) => `<button type="button" data-yo="${p}" aria-pressed="${yo === p}">${esc(nombre(p))}</button>`).join("");
-    $("#who-seg").innerHTML = seg; $("#a-yo").innerHTML = seg;
+    chip.hidden = !yo || !connected; chip.textContent = yo ? nombre(yo) : "";
+    $("#a-sesion").textContent = yo ? "Has entrado como " + nombre(yo) + ". Para entrar con el otro PIN, cierra la sesión." : "";
   }
 
   function renderForm() {
@@ -718,6 +709,8 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     }
     $("#f-cats").innerHTML = cfg.cats.map((c) =>
       `<button type="button" class="chip" data-cat="${esc(c.id)}" aria-pressed="${S.fCat === c.id}"><i style="background:${color(c.c)}"></i>${esc(c.nombre)}</button>`).join("");
+    if (S.fTipo === "personal" && yo) S.fPaga = yo;
+    $("#f-paga-fs").hidden = S.fTipo === "personal";
     $("#f-paga").innerHTML = ["A", "B"].map((p) =>
       `<button type="button" data-paga="${p}" aria-pressed="${S.fPaga === p}">${esc(nombre(p))}</button>`).join("");
     $$("#f-tipo button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === S.fTipo)));
@@ -725,7 +718,7 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     const p = g && g.tipo === "compartido" && S.fTipo === "compartido" ? parteDe(g) : cfg.parteA;
     $("#f-reparto").textContent = S.fTipo === "compartido"
       ? `Se reparte ${Math.round(p * 100)} % ${nombre("A")} · ${Math.round((1 - p) * 100)} % ${nombre("B")}.`
-      : `Cuenta solo para ${nombre(S.fPaga)}; no entra en el reparto.`;
+      : `Solo lo verás tú (${nombre(yo || S.fPaga)}). No entra en el reparto.`;
     $("#form-title").textContent = S.editId ? "Editar gasto" : "Nuevo gasto";
     $("#btn-guardar").textContent = S.editId ? "Guardar cambios" : "Guardar gasto";
     $("#btn-cancel-edit").hidden = !S.editId;
@@ -807,7 +800,7 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     $$("#r-alcance button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === S.alcance)));
     const m = S.mes, prev = shiftMes(m, -1);
     const cur = totalMes(m), ant = totalMes(prev);
-    $("#r-eyebrow").textContent = (S.alcance === "comp" ? "Gastos compartidos en " : "Gastado en total en ") + mesNombre(m);
+    $("#r-eyebrow").textContent = (S.alcance === "comp" ? "Gastos compartidos en " : S.alcance === "pers" ? "Mis gastos personales en " : "Compartidos + mis personales en ") + mesNombre(m);
     $("#r-total").textContent = ready ? eur(cur) : "—";
     let delta = "";
     if (ready) {
@@ -911,7 +904,6 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     renderNav(); renderWho(); renderForm(); renderRecent(); renderMov(); renderRes();
     const sh = $("#a-sheet"); sh.hidden = !sheetUrl; if (sheetUrl) sh.href = sheetUrl;
     $("#a-sync").textContent = lastSync ? "Última actualización: " + new Date(lastSync).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }) : "";
-    if (!$("#a-yo").innerHTML) renderWho();
   }
 
   /* ---------- acciones ---------- */
@@ -925,7 +917,7 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
   }
 
   function resetForm() {
-    S.editId = null; S.fTipo = "compartido"; S.fPaga = store.get("cc-yo") || S.fPaga;
+    S.editId = null; S.fTipo = "compartido"; S.fPaga = yo || S.fPaga;
     $("#f-importe").value = ""; $("#f-nota").value = ""; $("#f-fecha").value = hoy();
     $("#del-confirm").hidden = true; formErr("");
     renderForm(); renderWho();
@@ -1045,7 +1037,6 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     if (d.paga) { S.fPaga = d.paga; return renderForm(); }
     if (t.parentElement && t.parentElement.id === "f-tipo") { S.fTipo = d.v; return renderForm(); }
     if (t.parentElement && t.parentElement.id === "r-alcance") { S.alcance = d.v; return renderRes(); }
-    if (d.yo) { store.set("cc-yo", d.yo); if (!S.editId) S.fPaga = d.yo; renderWho(); return renderForm(); }
     if (d.filtro) { S.filtro = d.filtro; return renderMov(); }
     if (d.mes) { S.mes = shiftMes(S.mes, Number(d.mes)); S.saldo = false; renderNav(); renderMov(); return renderRes(); }
     if (d.pick) { S.mes = d.pick; renderNav(); renderMov(); return renderRes(); }
@@ -1070,7 +1061,7 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
       }
       case "a-guardar": return guardarAjustes();
       case "a-export": return exportar();
-      case "a-logout": store.set("cc-pin", ""); pin = ""; ready = false; gastos = []; return showGate("");
+      case "a-logout": store.set("cc-pin", ""); pin = ""; yo = ""; ready = false; connected = false; gastos = []; resetForm(); S.view = "anadir"; try { location.hash = "anadir"; } catch (e) {} renderAll(); return showGate("");
       case "who-chip": return go("ajustes");
     }
   });
