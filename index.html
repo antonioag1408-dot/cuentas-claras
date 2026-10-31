@@ -101,8 +101,8 @@ header.top .wrap { display: flex; align-items: center; justify-content: space-be
 }
 
 main { padding-bottom: calc(var(--nav-h) + 32px + env(safe-area-inset-bottom, 0px)); }
-main > .wrap { padding-block: 20px; display: grid; gap: 22px; }
-section[data-view] { display: grid; gap: 22px; }
+main > .wrap { padding-block: 20px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; }
+section[data-view] { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; min-width: 0; }
 
 h1, h2, h3 { margin: 0; text-wrap: balance; }
 h1 { font: 700 26px/1.15 var(--f-display); letter-spacing: -0.015em; }
@@ -110,7 +110,7 @@ h2 { font: 700 20px/1.2 var(--f-display); }
 h3 { font: 600 13px/1.2 var(--f-body); text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
 p { margin: 0; }
 .hint { font-size: 13px; color: var(--muted); }
-.block { display: grid; gap: 12px; }
+.block { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; }
 
 .banner {
   background: var(--accent-soft); color: var(--ink); border-radius: var(--r);
@@ -127,7 +127,7 @@ p { margin: 0; }
 }
 .amount:focus-within { border-color: var(--accent); }
 .amount input {
-  flex: 1; min-width: 0; border: 0; background: transparent; outline: none;
+  flex: 1 1 0; min-width: 0; width: 100%; border: 0; background: transparent; outline: none;
   font: 600 40px/1.1 var(--f-num); letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
 }
@@ -155,14 +155,21 @@ legend, .lbl { font-size: 13px; font-weight: 600; color: var(--ink-2); padding: 
 }
 .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
 .seg.small button { padding: 6px 10px; font-size: 14px; }
-.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-@media (max-width: 420px) { .row2 { grid-template-columns: 1fr; } }
+.row2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+@media (max-width: 480px) { .row2 { grid-template-columns: minmax(0, 1fr); } }
 .field { display: grid; gap: 6px; font-size: 13px; font-weight: 600; color: var(--ink-2); min-width: 0; }
 .field input, .field select {
   width: 100%; min-width: 0; font-size: 16px; font-weight: 400; color: var(--ink);
   background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px;
 }
 .field input:focus { border-color: var(--accent); outline: none; }
+/* Safari en iPhone da al campo de fecha un ancho mínimo propio: lo anulamos */
+input[type="date"] {
+  -webkit-appearance: none; appearance: none; display: block;
+  min-width: 0; max-width: 100%; min-height: 46px; text-align: left;
+}
+input[type="date"]::-webkit-date-and-time-value { text-align: left; margin: 0; }
+input, select, textarea { max-width: 100%; }
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   border-radius: var(--r); padding: 13px 18px; font-weight: 700; font-size: 16px;
@@ -333,7 +340,7 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
         </div>
         <label class="amount" for="f-importe">
           <span class="sr">Importe en euros</span>
-          <input id="f-importe" inputmode="decimal" autocomplete="off" placeholder="0,00">
+          <input id="f-importe" inputmode="decimal" autocomplete="off" placeholder="0,00" size="1">
           <span class="eur">€</span>
         </label>
         <fieldset>
