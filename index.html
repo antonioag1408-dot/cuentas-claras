@@ -316,6 +316,25 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
 .search:focus-within { border-color: var(--accent); }
 .search svg { width: 18px; height: 18px; flex: none; fill: none; stroke: var(--muted); stroke-width: 2; stroke-linecap: round; }
 .search input { flex: 1; min-width: 0; border: 0; background: transparent; padding: 11px 0; font-size: 16px; outline: none; }
+.amt.ing { color: var(--good); }
+.tag.ing { background: transparent; color: var(--good); border: 1px solid currentColor; }
+.tag.fijo { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+.fijos-card { gap: 10px; }
+.fijos-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.fijos-head b { font: 700 17px/1.2 var(--f-display); }
+.fijos-head span { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.fijo-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding-top: 10px; border-top: 1px solid var(--line); }
+.fijo-row .t { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fijo-row .s { font-size: 13px; color: var(--muted); }
+.chip-warn { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 1px 6px; border-radius: 6px; color: var(--danger); border: 1px solid currentColor; margin-left: 4px; vertical-align: 1px; }
+.btn.accent { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.check { display: flex; align-items: center; gap: 10px; font-size: 15px; color: var(--ink); }
+.check input { width: 20px; height: 20px; accent-color: var(--accent); flex: none; }
+.kv { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; align-items: baseline; font-size: 15px; }
+.kv .v { font: 600 15px/1.3 var(--f-num); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.kv .tot { font-weight: 700; padding-top: 8px; border-top: 1px solid var(--line); }
+.kv .v.tot { font-size: 17px; }
+.kv .pos { color: var(--good); }
 .balchart { display: grid; gap: 4px; }
 .balchart svg { width: 100%; height: auto; display: block; overflow: visible; }
 .balchart .cap { font-size: 12px; color: var(--muted); }
@@ -366,6 +385,11 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
           <h1 id="form-title">Nuevo gasto</h1>
           <button type="button" class="link" id="btn-cancel-edit" hidden>Cancelar</button>
         </div>
+        <div class="seg" id="f-modo">
+          <button type="button" data-modo="gasto">Gasto</button>
+          <button type="button" data-modo="ingreso">Ingreso</button>
+        </div>
+        <p class="hint" id="f-fijo-hint" hidden></p>
         <label class="amount" for="f-importe">
           <span class="sr">Importe en euros</span>
           <input id="f-importe" inputmode="decimal" autocomplete="off" placeholder="0,00" size="1">
@@ -386,7 +410,7 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
           <legend>Pagó</legend>
           <div class="seg" id="f-paga"></div>
         </fieldset>
-        <fieldset>
+        <fieldset id="f-tipo-fs">
           <legend>Tipo de gasto</legend>
           <div class="seg" id="f-tipo">
             <button type="button" data-v="compartido">Compartido</button>
@@ -407,6 +431,8 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
         </div>
       </form>
 
+      <div class="card fijos-card" id="fijos-card" hidden></div>
+
       <div class="block" id="recent-block">
         <h3>Últimos apuntados</h3>
         <div id="recent"></div>
@@ -424,11 +450,7 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
         <input id="mv-q" type="search" placeholder="Buscar en todos los meses" autocomplete="off" enterkeyhint="search">
       </label>
-      <div class="seg small" id="mv-tipo">
-        <button type="button" data-tipo="all">Todos</button>
-        <button type="button" data-tipo="compartido">Compartidos</button>
-        <button type="button" data-tipo="personal">Personales</button>
-      </div>
+      <div class="chips scroll" id="mv-tipo"></div>
       <div class="seg small" id="mv-quien"></div>
       <div class="chips scroll" id="mv-filtros"></div>
       <p class="sumline" id="mv-total"></p>
@@ -452,6 +474,7 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
         <div class="big" id="r-total">0,00 €</div>
         <p class="delta" id="r-delta"></p>
       </div>
+      <div class="card" id="r-mimes"></div>
       <div class="card balance" id="r-balance"></div>
       <div class="block">
         <h3>Por categoría</h3>
@@ -490,6 +513,39 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
       </div>
       <p class="err" id="a-err" hidden></p>
       <button type="button" class="btn primary" id="a-guardar">Guardar ajustes</button>
+      <hr>
+      <div class="block">
+        <h3>Gastos fijos</h3>
+        <p class="hint">Renta, luz, internet… Cada mes aparecen en Añadir para apuntarlos con un toque. Los personales solo los ves tú.</p>
+        <div id="a-fijos"></div>
+        <div class="chips" id="a-fijos-atajos"></div>
+        <button type="button" class="btn small" id="a-fijo-nuevo">Añadir gasto fijo</button>
+        <form class="card" id="a-fijo-form" hidden novalidate>
+          <label class="field" for="fx-nombre">Nombre<input id="fx-nombre" maxlength="40" autocomplete="off"></label>
+          <label class="check" for="fx-variable"><input type="checkbox" id="fx-variable"> El importe cambia cada mes (luz, agua…)</label>
+          <div class="row2">
+            <label class="field" for="fx-importe"><span id="fx-importe-lbl">Importe (€)</span><input id="fx-importe" inputmode="decimal" autocomplete="off"></label>
+            <label class="field" for="fx-dia">Día del mes en que se paga<input id="fx-dia" type="number" min="1" max="31" inputmode="numeric"></label>
+          </div>
+          <label class="field" for="fx-cat">Categoría<select id="fx-cat"></select></label>
+          <span class="lbl">Tipo</span>
+          <div class="seg small" id="fx-tipo">
+            <button type="button" data-fxtipo="compartido">Compartido</button>
+            <button type="button" data-fxtipo="personal">Personal</button>
+          </div>
+          <div class="block" id="fx-paga-wrap">
+            <span class="lbl">Lo paga</span>
+            <div class="seg small" id="fx-paga"></div>
+          </div>
+          <label class="check" for="fx-activo"><input type="checkbox" id="fx-activo" checked> Activo (desmárcalo para pausarlo)</label>
+          <p class="err" id="fx-err" hidden></p>
+          <div class="edit-acts">
+            <button type="submit" class="btn accent" id="fx-guardar">Guardar</button>
+            <button type="button" class="btn" id="fx-cancelar">Cancelar</button>
+          </div>
+          <button type="button" class="btn danger" id="fx-borrar" hidden>Borrar este gasto fijo</button>
+        </form>
+      </div>
       <hr>
       <div class="block">
         <h3>Vuestros datos</h3>
@@ -557,6 +613,7 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
 
   let cfg = JSON.parse(JSON.stringify(DEF));
   let gastos = [];
+  let fijos = [];
   let ready = false, connected = false, sheetUrl = "", lastSync = 0;
   let pin = "";
   let yo = "";  // "A" o "B": lo dice el script de Google según el PIN
@@ -572,7 +629,8 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     view: "anadir", mes: ym(new Date()), filtro: "all", alcance: "comp",
     editId: null, fCat: null, fPaga: "A", fTipo: "compartido",
     fParte: null, parteOpen: false, catManual: false,
-    q: "", quien: "all", tipo: "all", saldo: false
+    q: "", quien: "all", tipo: "all", saldo: false,
+    modo: "gasto", fFijo: null, fxEdit: null, fxTipo: "compartido", fxPaga: "A", fxBorrar: false
   };
 
   const eurF = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" });
@@ -585,8 +643,12 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
   const diaLabel = (f) => { const [y, m, d] = f.split("-").map(Number); return new Date(y, m - 1, d).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" }); };
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const nombre = (p) => (p === "A" ? cfg.nombreA : cfg.nombreB);
-  const catOf = (id) => cfg.cats.find((c) => c.id === id) || { id, nombre: id || "Sin categoría", c: 0 };
-  const color = (c) => (c ? "var(--s" + c + ")" : "var(--muted)");
+  const CATS_ING = [
+    { id: "nomina", nombre: "Nómina", c: "ing" }, { id: "extra", nombre: "Extra", c: "ing" },
+    { id: "devolucion", nombre: "Devolución", c: "ing" }, { id: "otros_ing", nombre: "Otros ingresos", c: "ing" }
+  ];
+  const catOf = (id) => cfg.cats.find((c) => c.id === id) || CATS_ING.find((c) => c.id === id) || { id, nombre: id || "Sin categoría", c: 0 };
+  const color = (c) => (c === "ing" ? "var(--good)" : c ? "var(--s" + c + ")" : "var(--muted)");
   const parteDe = (g) => (typeof g.parteA === "number" ? g.parteA : 0.5);
 
   function normCfg(d) {
@@ -604,7 +666,7 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
 
   /* ---------- cálculos ---------- */
   const enMes = (g, m) => typeof g.fecha === "string" && g.fecha.slice(0, 7) === m;
-  const esGasto = (g) => g.tipo !== "liquidacion";
+  const esGasto = (g) => g.tipo !== "liquidacion" && g.tipo !== "ingreso";
   const cuenta = (g) => esGasto(g) && (S.alcance === "todo" || (S.alcance === "pers" ? g.tipo === "personal" : g.tipo === "compartido"));
   const totalMes = (m) => gastos.filter((g) => enMes(g, m) && cuenta(g)).reduce((a, g) => a + (g.cent || 0), 0);
 
@@ -681,6 +743,7 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
   function aplicar(j) {
     cfg = normCfg(j.cfg);
     gastos = Array.isArray(j.gastos) ? j.gastos : [];
+    fijos = Array.isArray(j.fijos) ? j.fijos : [];
     sheetUrl = typeof j.sheetUrl === "string" ? j.sheetUrl : "";
     const antes = yo;
     yo = j.yo === "B" ? "B" : "A";
@@ -688,7 +751,7 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     if (!S.editId && antes !== yo) S.fPaga = yo;
     ready = true; connected = true; lastSync = Date.now();
     if (S.editId && !gastos.some((g) => g.id === S.editId)) resetForm();
-    if (S.view !== "ajustes") fillAjustes();
+    if (S.view !== "ajustes" || !ajustesTocados) fillAjustes();
     banner("");
     renderAll();
   }
@@ -781,8 +844,13 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     }
     const c = catOf(g.cat);
     const titulo = g.nota ? g.nota : c.nombre;
+    if (g.tipo === "ingreso") {
+      return `<button type="button" class="row${g.pend ? " pend" : ""}" data-edit="${esc(g.id)}"><span class="dot" style="background:var(--good)"></span>
+        <span class="main"><div class="t">${esc(titulo)}</div><div class="s">${esc(g.nota ? c.nombre : "")}<span class="tag ing">Ingreso</span></div></span>
+        <span class="amt ing">+${eur(g.cent)}</span></button>`;
+    }
     const sub = [g.nota ? c.nombre : "", g.tipo === "personal" ? "" : "Pagó " + nombre(g.paga)].filter(Boolean).join(" · ");
-    const tag = g.tipo === "personal" ? '<span class="tag">Personal</span>' : "";
+    const tag = (g.tipo === "personal" ? '<span class="tag">Personal</span>' : "") + (g.fijo ? '<span class="tag fijo">Fijo</span>' : "");
     return `<button type="button" class="row${g.pend ? " pend" : ""}" data-edit="${esc(g.id)}"><span class="dot" style="background:${color(c.c)}"></span>
       <span class="main"><div class="t">${esc(titulo)}</div><div class="s">${esc(sub)}${tag}</div></span>
       <span class="amt">${eur(g.cent)}</span></button>`;
@@ -804,14 +872,22 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     $("#a-sesion").textContent = yo ? "Has entrado como " + nombre(yo) + ". Para entrar con el otro PIN, cierra la sesión." : "";
   }
 
+  const listaCats = () => (S.modo === "ingreso" ? CATS_ING : cfg.cats);
   function renderForm() {
-    if (!S.fCat || !cfg.cats.some((c) => c.id === S.fCat)) {
-      if (!S.editId) S.fCat = cfg.cats[0] ? cfg.cats[0].id : null;
-    }
-    $("#f-cats").innerHTML = cfg.cats.map((c) =>
+    const ing = S.modo === "ingreso";
+    const cats = listaCats();
+    if (!S.fCat || !cats.some((c) => c.id === S.fCat)) S.fCat = cats[0] ? cats[0].id : null;
+    $$("#f-modo button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.modo === S.modo)));
+    $("#f-modo").hidden = !!S.editId || !!S.fFijo;
+    $("#f-tipo-fs").hidden = ing;
+    $("#f-nota").placeholder = ing ? "Nómina, extra, devolución…" : "Mercadona, cena, luz…";
+    const fj = S.fFijo ? fijos.find((f) => f.id === S.fFijo) : null;
+    $("#f-fijo-hint").hidden = !fj;
+    if (fj) $("#f-fijo-hint").textContent = "Gasto fijo: " + fj.nombre + ". Revisa el importe y guarda.";
+    $("#f-cats").innerHTML = cats.map((c) =>
       `<button type="button" class="chip" data-cat="${esc(c.id)}" aria-pressed="${S.fCat === c.id}"><i style="background:${color(c.c)}"></i>${esc(c.nombre)}</button>`).join("");
-    if (S.fTipo === "personal" && yo) S.fPaga = yo;
-    $("#f-paga-fs").hidden = S.fTipo === "personal";
+    if ((ing || S.fTipo === "personal") && yo) S.fPaga = yo;
+    $("#f-paga-fs").hidden = ing || S.fTipo === "personal";
     $("#f-paga").innerHTML = ["A", "B"].map((p) =>
       `<button type="button" data-paga="${p}" aria-pressed="${S.fPaga === p}">${esc(nombre(p))}</button>`).join("");
     $$("#f-tipo button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === S.fTipo)));
@@ -829,11 +905,12 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
       $("#f-parte-a").textContent = `${nombre("A")} ${Math.round(p * 100)} %`;
       $("#f-parte-b").textContent = `${nombre("B")} ${Math.round((1 - p) * 100)} %`;
     }
-    $("#form-title").textContent = S.editId ? "Editar gasto" : "Nuevo gasto";
-    $("#btn-guardar").textContent = S.editId ? "Guardar cambios" : "Guardar gasto";
+    $("#form-title").textContent = S.editId ? (ing ? "Editar ingreso" : "Editar gasto") : fj ? "Apuntar " + fj.nombre : (ing ? "Nuevo ingreso" : "Nuevo gasto");
+    $("#btn-guardar").textContent = S.editId ? "Guardar cambios" : (ing ? "Guardar ingreso" : "Guardar gasto");
     $("#btn-cancel-edit").hidden = !S.editId;
     $("#del-zone").hidden = !S.editId;
     $("#recent-block").hidden = !!S.editId;
+    renderFijosCard();
     renderSug();
   }
 
@@ -842,7 +919,7 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
   function sugerencias(cat, q) {
     const map = new Map();
     for (const g of gastos) {
-      if (g.tipo === "liquidacion" || !g.nota) continue;
+      if (g.tipo === "liquidacion" || !g.nota || (g.tipo === "ingreso") !== (S.modo === "ingreso")) continue;
       const k = normNota(g.nota); if (!k) continue;
       let e = map.get(k);
       if (!e) { e = { k, texto: g.nota.trim(), n: 0, nCat: 0, ts: -1 }; map.set(k, e); }
@@ -878,11 +955,11 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     const k = normNota(nota); if (!k) return null;
     const cnt = {}, ult = {};
     for (const g of gastos) {
-      if (g.tipo === "liquidacion" || normNota(g.nota) !== k) continue;
+      if (g.tipo === "liquidacion" || normNota(g.nota) !== k || (g.tipo === "ingreso") !== (S.modo === "ingreso")) continue;
       cnt[g.cat] = (cnt[g.cat] || 0) + 1; ult[g.cat] = Math.max(ult[g.cat] || 0, g.ts || 0);
     }
     const best = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a] || ult[b] - ult[a])[0];
-    return best && cfg.cats.some((c) => c.id === best) ? best : null;
+    return best && listaCats().some((c) => c.id === best) ? best : null;
   }
   function autoCat() {
     if (S.catManual || S.editId) return;
@@ -890,6 +967,164 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     if (c && c !== S.fCat) { S.fCat = c; renderForm(); }
   }
   const parteForm = () => (typeof S.fParte === "number" ? S.fParte : cfg.parteA);
+
+  /* ---------- gastos fijos ---------- */
+  const mesActual = () => ym(new Date());
+  const apuntadoEn = (f, m) => gastos.find((g) => g.fijo === f.id && enMes(g, m));
+  function ultimoImporte(f) {
+    const prev = gastos.filter((g) => g.fijo === f.id).sort((a, b) => (b.fecha || "").localeCompare(a.fecha || ""))[0];
+    return prev ? prev.cent : f.cent;
+  }
+  function estimado(f) { return f.variable ? ultimoImporte(f) : f.cent; }
+  function miParteDe(cent, tipo, parteA) { return tipo === "personal" ? cent : Math.round(cent * ((yo || "A") === "A" ? parteA : 1 - parteA)); }
+  function renderFijosCard() {
+    const card = $("#fijos-card");
+    const activos = fijos.filter((f) => f.activo);
+    if (!ready || !activos.length || S.editId || S.fFijo) { card.hidden = true; return; }
+    const m = mesActual(), hoyD = new Date().getDate();
+    const pend = activos.filter((f) => !apuntadoEn(f, m)).sort((a, b) => a.dia - b.dia);
+    const hechos = activos.filter((f) => apuntadoEn(f, m));
+    const falta = pend.reduce((a, f) => a + (estimado(f) || 0), 0);
+    let html = `<div class="fijos-head"><b>Fijos de ${esc(mesNombre(m))}</b><span>${hechos.length} de ${activos.length} apuntados</span></div>`;
+    if (!pend.length) html += `<p class="hint">Todos los gastos fijos de este mes están apuntados.</p>`;
+    else {
+      html += `<p class="hint">${falta ? "Faltan unos " + eur(falta) + (pend.some((f) => f.variable && !estimado(f)) ? " más los variables" : "") + "." : (pend.length === 1 ? "Queda 1 por apuntar." : "Quedan " + pend.length + " por apuntar.")}</p>`;
+      html += pend.map((f) => {
+        const est = estimado(f);
+        const imp = f.variable ? (est ? "variable · último " + eur(est) : "variable") : eur(f.cent);
+        const venc = hoyD > f.dia ? '<span class="chip-warn">Pasado</span>' : "";
+        const quien = f.tipo === "personal" ? "personal" : "paga " + nombre(f.paga);
+        return `<div class="fijo-row"><div style="min-width:0"><div class="t">${esc(f.nombre)}${venc}</div>
+          <div class="s">Día ${f.dia} · ${esc(imp)} · ${esc(quien)}</div></div>
+          <button type="button" class="btn small accent" data-fijo-apuntar="${esc(f.id)}">Apuntar</button></div>`;
+      }).join("");
+    }
+    if (hechos.length) html += `<p class="hint">Apuntados: ${hechos.map((f) => esc(f.nombre) + " " + eur(apuntadoEn(f, m).cent)).join(" · ")}</p>`;
+    card.innerHTML = html; card.hidden = false;
+  }
+  function apuntarFijo(id) {
+    const f = fijos.find((x) => x.id === id); if (!f) return;
+    const cent = f.variable ? ultimoImporte(f) : f.cent;
+    const data = { fecha: hoy(), cent: cent || 0, cat: f.cat, paga: f.tipo === "personal" ? yo : f.paga, tipo: f.tipo,
+      parteA: f.tipo === "compartido" ? f.parteA : null, nota: f.nombre, fijo: f.id };
+    if (f.variable || !cent) {
+      resetForm(); rellenarForm(data);
+      if (!cent) $("#f-importe").value = "";
+      window.scrollTo(0, 0); focoImporte(); return;
+    }
+    altaOptimista(data, "Apuntado: " + f.nombre + " " + eur(cent));
+  }
+
+  const ATAJOS = [
+    { nombre: "Alquiler", variable: false, dia: 1 }, { nombre: "Luz", variable: true, dia: 10 },
+    { nombre: "Agua", variable: true, dia: 10 }, { nombre: "Gas", variable: true, dia: 10 },
+    { nombre: "Internet", variable: false, dia: 5 }, { nombre: "Móvil", variable: false, dia: 5, tipo: "personal" }
+  ];
+  function renderFijosAjustes() {
+    const lista = fijos.slice().sort((a, b) => (b.activo - a.activo) || a.dia - b.dia);
+    $("#a-fijos").innerHTML = lista.length
+      ? `<div class="list">${lista.map((f) => {
+          const c = catOf(f.cat);
+          const sub = ["Día " + f.dia, f.tipo === "personal" ? "Personal" : "Compartido · paga " + nombre(f.paga), f.activo ? "" : "Pausado"].filter(Boolean).join(" · ");
+          return `<button type="button" class="row" data-fx-edit="${esc(f.id)}"${f.activo ? "" : ' style="opacity:.6"'}><span class="dot" style="background:${color(c.c)}"></span>
+            <span class="main"><div class="t">${esc(f.nombre)}</div><div class="s">${esc(sub)}</div></span>
+            <span class="amt">${f.variable ? (f.cent ? "≈" + eur(f.cent) : "variable") : eur(f.cent)}</span></button>`;
+        }).join("")}</div>`
+      : `<p class="hint">Aún no hay gastos fijos. Empieza con un atajo:</p>`;
+    const usados = new Set(fijos.map((f) => normNota(f.nombre)));
+    $("#a-fijos-atajos").innerHTML = S.fxEdit ? "" : ATAJOS.filter((a) => !usados.has(normNota(a.nombre))).map((a) =>
+      `<button type="button" class="chip" data-fx-atajo="${esc(a.nombre)}">+ ${esc(a.nombre)}</button>`).join("");
+    $("#a-fijo-nuevo").hidden = !!S.fxEdit;
+    $("#a-fijo-form").hidden = !S.fxEdit;
+    if (S.fxEdit) {
+      $$("#fx-tipo button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.fxtipo === S.fxTipo)));
+      $("#fx-paga-wrap").hidden = S.fxTipo === "personal";
+      $("#fx-paga").innerHTML = ["A", "B"].map((p) => `<button type="button" data-fxpaga="${p}" aria-pressed="${S.fxPaga === p}">${esc(nombre(p))}</button>`).join("");
+      $("#fx-importe-lbl").textContent = $("#fx-variable").checked ? "Importe aproximado (opcional)" : "Importe (€)";
+      $("#fx-borrar").hidden = S.fxEdit === "nuevo";
+      $("#fx-borrar").textContent = S.fxBorrar ? "Pulsa otra vez para borrarlo" : "Borrar este gasto fijo";
+    }
+  }
+  function abrirFijo(f) {
+    S.fxEdit = f && f.id ? f.id : "nuevo"; S.fxBorrar = false;
+    const vivienda = cfg.cats.find((c) => c.id === "vivienda");
+    $("#fx-nombre").value = (f && f.nombre) || "";
+    $("#fx-variable").checked = !!(f && f.variable);
+    $("#fx-importe").value = f && f.cent ? (f.cent / 100).toFixed(2).replace(".", ",") : "";
+    $("#fx-dia").value = (f && f.dia) || 1;
+    $("#fx-cat").innerHTML = cfg.cats.map((c) => `<option value="${esc(c.id)}">${esc(c.nombre)}</option>`).join("");
+    $("#fx-cat").value = (f && f.cat && cfg.cats.some((c) => c.id === f.cat)) ? f.cat : (vivienda ? vivienda.id : cfg.cats[0].id);
+    S.fxTipo = (f && f.tipo) || "compartido"; S.fxPaga = (f && f.paga) || yo || "A";
+    $("#fx-activo").checked = f && f.activo === false ? false : true;
+    $("#fx-err").hidden = true;
+    renderFijosAjustes();
+    setTimeout(() => { try { (f && f.nombre ? $("#fx-importe") : $("#fx-nombre")).focus(); } catch (e) {} }, 30);
+  }
+  async function guardarFijo(ev) {
+    ev.preventDefault();
+    const err = $("#fx-err"); const fail = (m) => { err.textContent = m; err.hidden = false; };
+    err.hidden = true;
+    const nombreF = $("#fx-nombre").value.trim();
+    const variable = $("#fx-variable").checked;
+    const txt = $("#fx-importe").value.trim();
+    const v = txt ? parseImporte(txt) : 0;
+    const dia = Number($("#fx-dia").value);
+    if (!nombreF) return fail("Ponle un nombre, por ejemplo «Alquiler».");
+    if (txt && !(v >= 0)) return fail("El importe no es válido. Escríbelo como 650 o 45,20.");
+    if (!variable && !(v > 0)) return fail("Escribe el importe, o marca que cambia cada mes.");
+    if (!(dia >= 1 && dia <= 31)) return fail("El día debe estar entre 1 y 31.");
+    const data = { id: S.fxEdit === "nuevo" ? "" : S.fxEdit, nombre: nombreF, cent: Math.round((v || 0) * 100), variable, dia: Math.round(dia),
+      cat: $("#fx-cat").value, tipo: S.fxTipo, paga: S.fxPaga, parteA: cfg.parteA, activo: $("#fx-activo").checked };
+    const prev = S.fxEdit === "nuevo" ? null : fijos.find((f) => f.id === S.fxEdit);
+    if (prev && prev.tipo === "compartido") data.parteA = prev.parteA;
+    const b = $("#fx-guardar"); b.disabled = true; b.textContent = "Guardando…";
+    try { await api("fijoGuardar", { data }); S.fxEdit = null; renderFijosAjustes(); toast("Gasto fijo guardado"); }
+    catch (ex) { if (esAuth(ex)) showGate(errMsg(ex)); else fail(errMsg(ex)); }
+    finally { b.disabled = false; b.textContent = "Guardar"; }
+  }
+  async function borrarFijo() {
+    if (!S.fxBorrar) { S.fxBorrar = true; return renderFijosAjustes(); }
+    const id = S.fxEdit; S.fxEdit = null; S.fxBorrar = false;
+    fijos = fijos.filter((f) => f.id !== id); renderFijosAjustes(); renderForm();
+    try { await api("fijoBorrar", { id }); toast("Gasto fijo borrado. Los gastos ya apuntados se conservan."); }
+    catch (ex) { writeErr(ex); }
+  }
+
+  /* ---------- Mi mes (solo lo ve cada uno) ---------- */
+  function renderMiMes() {
+    const el = $("#r-mimes");
+    if (!ready || !yo) { el.hidden = true; return; }
+    const m = S.mes, esActual = m === mesActual();
+    const delMes = gastos.filter((g) => enMes(g, m));
+    const ingresos = delMes.filter((g) => g.tipo === "ingreso").reduce((a, g) => a + g.cent, 0);
+    const parteComp = delMes.filter((g) => g.tipo === "compartido").reduce((a, g) => a + miParteDe(g.cent, "compartido", parteDe(g)), 0);
+    const pers = delMes.filter((g) => g.tipo === "personal").reduce((a, g) => a + g.cent, 0);
+    const gasto = parteComp + pers;
+    const ahorro = ingresos - gasto;
+    const pendientes = esActual ? fijos.filter((f) => f.activo && !apuntadoEn(f, m)).reduce((a, f) => a + miParteDe(estimado(f) || 0, f.tipo, f.parteA), 0) : 0;
+    const vivienda = delMes.filter((g) => g.cat === "vivienda" && (g.tipo === "compartido" || g.tipo === "personal"))
+      .reduce((a, g) => a + (g.tipo === "personal" ? g.cent : miParteDe(g.cent, "compartido", parteDe(g))), 0);
+    if (!ingresos && !gasto && !pendientes) { el.hidden = true; return; }
+    const fila = (k, v, cls) => `<span${cls ? ` class="${cls}"` : ""}>${k}</span><span class="v${cls ? " " + cls : ""}">${v}</span>`;
+    let html = `<h3>Mi mes · ${esc(nombre(yo))}</h3><div class="kv">`;
+    html += fila("Ingresos", ingresos ? `<span class="pos">+${eur(ingresos)}</span>` : "—");
+    html += fila("Mi parte de los compartidos", "−" + eur(parteComp));
+    html += fila("Mis gastos personales", "−" + eur(pers));
+    if (ingresos) {
+      const tasa = Math.round((ahorro / ingresos) * 100);
+      html += fila(ahorro >= 0 ? `Ahorro (${tasa} % de tus ingresos)` : "Has gastado más de lo que ha entrado", (ahorro >= 0 ? "" : "−") + eur(Math.abs(ahorro)), "tot");
+      if (pendientes) {
+        const libre = ahorro - pendientes;
+        html += fila("Fijos pendientes (tu parte)", "−" + eur(pendientes));
+        html += fila("Libre hasta fin de mes", (libre >= 0 ? "" : "−") + eur(Math.abs(libre)), "tot");
+      }
+    } else if (pendientes) html += fila("Fijos pendientes (tu parte)", "−" + eur(pendientes));
+    html += `</div>`;
+    if (ingresos && vivienda) html += `<p class="hint">Vivienda y servicios: ${Math.round((vivienda / ingresos) * 100)} % de tus ingresos.</p>`;
+    if (!ingresos) html += `<p class="hint">Apunta tus ingresos (Añadir → Ingreso) para ver cuánto ahorras.</p>`;
+    html += `<p class="hint">Solo lo ves tú.</p>`;
+    el.innerHTML = html; el.hidden = false;
+  }
 
   function emptyHTML(t, s) { return `<div class="empty"><b>${t}</b><span>${s}</span></div>`; }
   const cargando = () => emptyHTML("Cargando gastos…", "Un momento.");
@@ -904,10 +1139,11 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
   }
 
   function renderMov() {
-    $("#mv-filtros").innerHTML = [{ id: "all", nombre: "Todas", c: null }].concat(cfg.cats).map((c) =>
+    $("#mv-tipo").innerHTML = [["all", "Todos"], ["compartido", "Compartidos"], ["personal", "Personales"], ["ingreso", "Ingresos"]].map(([v, t]) =>
+      `<button type="button" class="chip" data-tipo="${v}" aria-pressed="${S.tipo === v}">${esc(t)}</button>`).join("");
+    $("#mv-filtros").innerHTML = [{ id: "all", nombre: "Todas", c: null }].concat(S.tipo === "ingreso" ? CATS_ING : cfg.cats).map((c) =>
       `<button type="button" class="chip" data-filtro="${esc(c.id)}" aria-pressed="${S.filtro === c.id}">${c.c ? `<i style="background:${color(c.c)}"></i>` : ""}${esc(c.nombre)}</button>`).join("");
-    $$("#mv-tipo button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.tipo === S.tipo)));
-    $("#mv-quien").hidden = S.tipo === "personal";
+    $("#mv-quien").hidden = S.tipo === "personal" || S.tipo === "ingreso";
     $("#mv-quien").innerHTML = [["all", "Pagó cualquiera"], ["A", nombre("A")], ["B", nombre("B")]].map(([v, t]) =>
       `<button type="button" data-quien="${v}" aria-pressed="${S.quien === v}">${esc(t)}</button>`).join("");
     const lista = $("#mv-lista");
@@ -916,15 +1152,22 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     const texto = (g) => normNota([g.nota, g.tipo === "liquidacion" ? "saldar cuentas" : catOf(g.cat).nombre, ((g.cent || 0) / 100).toFixed(2).replace(".", ","), nombre(g.paga)].join(" "));
     const items = gastos.filter((g) => (q ? texto(g).includes(q) : enMes(g, S.mes))
       && (S.filtro === "all" || g.cat === S.filtro)
-      && (S.tipo === "all" || (S.tipo === "personal" ? g.tipo === "personal" : g.tipo !== "personal"))
-      && (S.tipo === "personal" || S.quien === "all" || g.paga === S.quien)).sort(ordenar);
+      && (S.tipo === "all" || (S.tipo === "compartido" ? (g.tipo === "compartido" || g.tipo === "liquidacion") : g.tipo === S.tipo))
+      && (S.tipo === "personal" || S.tipo === "ingreso" || S.quien === "all" || g.paga === S.quien)).sort(ordenar);
     const solo = items.filter(esGasto);
+    const ings = items.filter((g) => g.tipo === "ingreso");
     const tot = solo.reduce((a, g) => a + (g.cent || 0), 0);
-    $("#mv-total").innerHTML = solo.length
-      ? `${solo.length} ${solo.length === 1 ? "gasto" : "gastos"}${S.tipo === "personal" ? (solo.length === 1 ? " personal" : " personales") : S.tipo === "compartido" ? (solo.length === 1 ? " compartido" : " compartidos") : ""}${q ? " en todos los meses" : ""} · total <b>${eur(tot)}</b>` : "";
+    const totIng = ings.reduce((a, g) => a + (g.cent || 0), 0);
+    const enTodos = q ? " en todos los meses" : "";
+    $("#mv-total").innerHTML = S.tipo === "ingreso"
+      ? (ings.length ? `${ings.length} ${ings.length === 1 ? "ingreso" : "ingresos"}${enTodos} · total <b class="pos">+${eur(totIng)}</b>` : "")
+      : [solo.length ? `${solo.length} ${solo.length === 1 ? "gasto" : "gastos"}${S.tipo === "personal" ? (solo.length === 1 ? " personal" : " personales") : S.tipo === "compartido" ? (solo.length === 1 ? " compartido" : " compartidos") : ""}${enTodos} · total <b>${eur(tot)}</b>` : "",
+         ings.length ? `ingresos <b class="pos">+${eur(totIng)}</b>` : ""].filter(Boolean).join(" · ");
     if (!items.length) {
       lista.innerHTML = q
         ? emptyHTML("Sin resultados", "No hay ningún gasto que contenga «" + esc(S.q.trim()) + "» con estos filtros.")
+        : S.tipo === "ingreso" && S.filtro === "all"
+          ? emptyHTML("Sin ingresos en " + mesNombre(S.mes), "En Añadir, elige «Ingreso» para apuntar tu nómina u otros ingresos. Solo los ves tú.")
         : S.tipo === "personal" && S.filtro === "all"
           ? emptyHTML("Sin gastos personales en " + mesNombre(S.mes), "Al apuntar un gasto, marca «Personal» y aparecerá aquí. Solo lo ves tú.")
           : emptyHTML("Nada en " + mesNombre(S.mes), S.filtro === "all" && S.quien === "all" && S.tipo === "all" ? "Los gastos que apuntéis este mes aparecerán aquí, agrupados por día." : "No hay gastos con estos filtros este mes.");
@@ -970,6 +1213,7 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
           : `<div><button type="button" class="btn small" id="saldo-go">Saldar cuentas</button></div>`}`;
     }
     if (ready) bEl.insertAdjacentHTML("beforeend", balanceChart());
+    renderMiMes();
 
     // Por categoría
     const cEl = $("#r-cats");
@@ -1065,7 +1309,9 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     </div>`;
   }
 
+  let ajustesTocados = false; // si el usuario está editando Ajustes, no le pisamos los cambios al refrescar
   function fillAjustes() {
+    ajustesTocados = false;
     draft = JSON.parse(JSON.stringify(cfg));
     $("#a-nombreA").value = draft.nombreA; $("#a-nombreB").value = draft.nombreB;
     $("#a-parte").value = Math.round(draft.parteA * 100);
@@ -1085,6 +1331,7 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
 
   function renderAll() {
     renderNav(); renderWho(); renderForm(); renderRecent(); renderMov(); renderRes();
+    renderFijosAjustes();
     const sh = $("#a-sheet"); sh.hidden = !sheetUrl; if (sheetUrl) sh.href = sheetUrl;
     $("#a-sync").textContent = lastSync ? "Última actualización: " + new Date(lastSync).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }) : "";
   }
@@ -1103,7 +1350,7 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
 
   function resetForm() {
     S.editId = null; S.fTipo = "compartido"; S.fPaga = yo || S.fPaga;
-    S.fParte = null; S.parteOpen = false; S.catManual = false;
+    S.fParte = null; S.parteOpen = false; S.catManual = false; S.modo = "gasto"; S.fFijo = null;
     $("#f-importe").value = ""; $("#f-nota").value = ""; $("#f-fecha").value = hoy();
     formErr("");
     renderForm(); renderWho();
@@ -1112,7 +1359,8 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
   function editar(id) {
     const g = gastos.find((x) => x.id === id); if (!g || g.tipo === "liquidacion") return;
     if (g.pend) { toast("Se está guardando; ábrelo en un momento."); return; }
-    S.editId = id; S.fCat = g.cat; S.fPaga = g.paga === "B" ? "B" : "A"; S.fTipo = g.tipo === "personal" ? "personal" : "compartido";
+    S.editId = id; S.modo = g.tipo === "ingreso" ? "ingreso" : "gasto"; S.fFijo = g.fijo || null;
+    S.fCat = g.cat; S.fPaga = g.paga === "B" ? "B" : "A"; S.fTipo = g.tipo === "personal" ? "personal" : "compartido";
     S.fParte = g.tipo === "compartido" ? parteDe(g) : null;
     S.parteOpen = g.tipo === "compartido" && Math.abs(parteDe(g) - cfg.parteA) > 0.001;
     S.catManual = true;
@@ -1138,19 +1386,25 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     if (v > 100000) { formErr("El importe parece demasiado alto. Revísalo."); return; }
     if (!S.fCat) { formErr("Elige una categoría."); return; }
     if (!connected) { formErr("No hay conexión con la hoja. Recarga la página."); return; }
+    const ing = S.modo === "ingreso";
+    const tipo = ing ? "ingreso" : S.fTipo;
     const data = {
-      fecha: $("#f-fecha").value || hoy(), cent: Math.round(v * 100), cat: S.fCat, paga: S.fPaga, tipo: S.fTipo,
-      parteA: S.fTipo === "compartido" ? parteForm() : null, nota: $("#f-nota").value.trim().slice(0, 80)
+      fecha: $("#f-fecha").value || hoy(), cent: Math.round(v * 100), cat: S.fCat, paga: ing ? (yo || S.fPaga) : S.fPaga, tipo,
+      parteA: tipo === "compartido" ? parteForm() : null, nota: $("#f-nota").value.trim().slice(0, 80), fijo: S.fFijo || ""
     };
     if (S.editId) return guardarEdicion(S.editId, data);
+    resetForm();
+    return altaOptimista(data, ing ? "Ingreso guardado: +" + eur(data.cent) : "Guardado: " + eur(data.cent) + " en " + catOf(data.cat).nombre);
+  }
 
-    // Alta instantánea: aparece ya en la lista y se envía por detrás
+  // Alta instantánea: aparece ya en la lista, se envía por detrás y se puede deshacer
+  async function altaOptimista(data, mensaje) {
     const antes = new Set(gastos.map((g) => g.id));
     const tmp = Object.assign({ id: "tmp-" + Date.now(), ts: Date.now(), pend: true }, data);
     gastos = gastos.concat([tmp]);
-    resetForm(); renderAll();
+    renderAll();
     let nuevoId = null, deshecho = false;
-    toast("Guardado: " + eur(data.cent) + " en " + catOf(data.cat).nombre, "Deshacer", async () => {
+    toast(mensaje, "Deshacer", async () => {
       deshecho = true;
       gastos = gastos.filter((g) => g.id !== tmp.id && g.id !== nuevoId); renderAll();
       if (nuevoId) { try { await api("delete", { id: nuevoId }); } catch (ex) { writeErr(ex); } }
@@ -1168,6 +1422,7 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
 
   function rellenarForm(data) {
     if (S.editId || $("#f-importe").value) return;
+    S.modo = data.tipo === "ingreso" ? "ingreso" : "gasto"; S.fFijo = data.fijo || null;
     S.fCat = data.cat || S.fCat; S.fPaga = data.paga; S.fTipo = data.tipo === "personal" ? "personal" : "compartido";
     S.fParte = data.tipo === "compartido" ? data.parteA : null; S.parteOpen = S.fParte != null && Math.abs(S.fParte - cfg.parteA) > 0.001;
     S.catManual = true;
@@ -1191,8 +1446,8 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
   async function borrar(id) {
     const g = gastos.find((x) => x.id === id); if (!g || g.pend) return false;
     gastos = gastos.filter((x) => x.id !== id); renderAll();
-    const data = { fecha: g.fecha, cent: g.cent, cat: g.cat, paga: g.paga, tipo: g.tipo, parteA: g.parteA, nota: g.nota };
-    toast(g.tipo === "liquidacion" ? "Pago borrado" : "Gasto borrado", "Deshacer", async () => {
+    const data = { fecha: g.fecha, cent: g.cent, cat: g.cat, paga: g.paga, tipo: g.tipo, parteA: g.parteA, nota: g.nota, fijo: g.fijo || "" };
+    toast(g.tipo === "liquidacion" ? "Pago borrado" : g.tipo === "ingreso" ? "Ingreso borrado" : "Gasto borrado", "Deshacer", async () => {
       const copia = Object.assign({}, g, { id: "tmp-" + Date.now(), pend: true });
       gastos = gastos.concat([copia]); renderAll();
       try { await api("add", { data }); toast("Recuperado"); }
@@ -1204,10 +1459,10 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
 
   function repetir() {
     const id = S.editId; const g = gastos.find((x) => x.id === id); if (!g) return;
-    const data = { fecha: hoy(), cent: g.cent, cat: g.cat, paga: g.tipo === "personal" ? yo : g.paga, tipo: g.tipo, parteA: g.parteA, nota: g.nota };
+    const data = { fecha: hoy(), cent: g.cent, cat: g.cat, paga: (g.tipo === "personal" || g.tipo === "ingreso") ? yo : g.paga, tipo: g.tipo, parteA: g.parteA, nota: g.nota, fijo: g.fijo || "" };
     resetForm(); rellenarForm(data);
     $("#f-fecha").value = hoy();
-    $("#form-title").textContent = "Nuevo gasto (copia)";
+    $("#form-title").textContent = (data.tipo === "ingreso" ? "Nuevo ingreso" : "Nuevo gasto") + " (copia)";
     window.scrollTo(0, 0); focoImporte();
   }
 
@@ -1275,7 +1530,13 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
     if (t.parentElement && t.parentElement.id === "r-alcance") { S.alcance = d.v; return renderRes(); }
     if (d.filtro) { S.filtro = d.filtro; return renderMov(); }
     if (d.quien) { S.quien = d.quien; return renderMov(); }
-    if (d.tipo) { S.tipo = d.tipo; return renderMov(); }
+    if (d.tipo) { if (S.tipo !== d.tipo) S.filtro = "all"; S.tipo = d.tipo; return renderMov(); }
+    if (d.modo) { if (S.modo !== d.modo) { S.modo = d.modo; S.fCat = null; S.catManual = false; S.fParte = null; S.parteOpen = false; } renderForm(); return focoImporte(); }
+    if (d.fijoApuntar) return apuntarFijo(d.fijoApuntar);
+    if (d.fxEdit) return abrirFijo(fijos.find((f) => f.id === d.fxEdit));
+    if (d.fxAtajo) { const a = ATAJOS.find((x) => x.nombre === d.fxAtajo); return abrirFijo({ nombre: a.nombre, variable: a.variable, dia: a.dia, tipo: a.tipo || "compartido" }); }
+    if (d.fxtipo) { S.fxTipo = d.fxtipo; return renderFijosAjustes(); }
+    if (d.fxpaga) { S.fxPaga = d.fxpaga; return renderFijosAjustes(); }
     if (d.mes) { S.mes = shiftMes(S.mes, Number(d.mes)); S.saldo = false; renderNav(); renderMov(); return renderRes(); }
     if (d.pick) { S.mes = d.pick; renderNav(); renderMov(); return renderRes(); }
     if (d.edit) return editar(d.edit);
@@ -1284,6 +1545,9 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
       case "btn-cancel-edit": resetForm(); return go("movimientos");
       case "btn-del": { const id = S.editId; resetForm(); go("movimientos"); if (id) await borrar(id); return; }
       case "btn-repetir": return repetir();
+      case "a-fijo-nuevo": return abrirFijo(null);
+      case "fx-cancelar": S.fxEdit = null; S.fxBorrar = false; return renderFijosAjustes();
+      case "fx-borrar": return borrarFijo();
       case "f-parte-go": S.parteOpen = true; S.fParte = parteForm(); return renderForm();
       case "f-parte-reset": S.parteOpen = false; S.fParte = null; return renderForm();
       case "toast-act": { const f = toastFn; clearTimeout(toastT); cerrarToast(); if (f) await f(); return; }
@@ -1291,6 +1555,7 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
       case "saldo-no": S.saldo = false; return renderRes();
       case "saldo-yes": return saldar();
       case "a-addcat": {
+        ajustesTocados = true;
         $$("#a-cats input").forEach((inp) => { draft.cats[Number(inp.dataset.i)].nombre = inp.value; });
         const used = new Set(draft.cats.map((c) => c.c));
         let slot = 1; while (used.has(slot) && slot < MAX_CATS) slot++;
@@ -1311,10 +1576,14 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
   $("#f-nota").addEventListener("input", () => { renderSug(); autoCat(); });
   $("#f-parte").addEventListener("input", (e) => { S.fParte = Number(e.target.value) / 100; renderForm(); });
   $("#mv-q").addEventListener("input", (e) => { S.q = e.target.value; renderMov(); });
+  $("#a-fijo-form").addEventListener("submit", guardarFijo);
+  $("#fx-variable").addEventListener("change", renderFijosAjustes);
   $("#g-form").addEventListener("submit", entrar);
   $("#g-alta").addEventListener("submit", altaSubmit);
   $("#a-pin-form").addEventListener("submit", cambiarPin);
+  $("#a-cats").addEventListener("input", () => { ajustesTocados = true; });
   ["#a-parte", "#a-nombreA", "#a-nombreB"].forEach((s) => $(s).addEventListener("input", () => {
+    ajustesTocados = true;
     $$("#a-cats input").forEach((inp) => { draft.cats[Number(inp.dataset.i)].nombre = inp.value; });
     renderAjustes();
   }));
