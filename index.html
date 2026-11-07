@@ -315,7 +315,13 @@ nav.tabs button[aria-current="page"] { color: var(--accent); }
 #toast button { background: none; border: 0; padding: 4px 2px; color: inherit; font-weight: 800; text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; }
 .row.pend { opacity: .55; }
 .inline-link { background: none; border: 0; padding: 0; color: var(--accent); font-weight: 600; font-size: inherit; text-decoration: underline; text-underline-offset: 2px; }
-.parte-wrap { display: grid; gap: 6px; padding-top: 4px; }
+.parte-wrap { display: grid; gap: 10px; padding: 12px; margin-top: 4px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); }
+.reparto-line { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 14px; color: var(--ink-2); }
+.reparto-line b { color: var(--ink); }
+.btn-mini { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 5px 12px; font-size: 13px; font-weight: 600; color: var(--accent); white-space: nowrap; }
+.btn-mini[aria-expanded="true"] { background: var(--accent-soft); }
+.presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.presets .chip { padding: 6px 12px; font-size: 13px; }
 .edit-acts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
 .search {
   display: flex; align-items: center; gap: 8px; min-width: 0;
@@ -440,8 +446,10 @@ nav.tabs button { font-size: 11px; }
           </div>
           <p class="hint" id="f-reparto"></p>
           <div class="parte-wrap" id="f-parte-wrap" hidden>
-            <input type="range" id="f-parte" min="0" max="100" step="5" aria-label="Porcentaje que paga la persona 1 en este gasto">
+            <div class="presets" id="f-parte-presets"></div>
+            <input type="range" id="f-parte" min="0" max="100" step="5" aria-label="Porcentaje que le toca a la persona 1 en este gasto">
             <div class="split"><span id="f-parte-a"></span><span id="f-parte-b"></span></div>
+            <p class="hint" id="f-parte-nota"></p>
           </div>
         </fieldset>
         <label class="field" for="f-fecha">Fecha<input type="date" id="f-fecha"></label>
@@ -899,7 +907,10 @@ nav.tabs button { font-size: 11px; }
         <span class="amt ing">+${eur(g.cent)}</span></button>`;
     }
     const sub = [g.nota ? c.nombre : "", g.tipo === "personal" ? "" : "Pagó " + nombre(g.paga)].filter(Boolean).join(" · ");
-    const tag = (g.tipo === "personal" ? '<span class="tag">Personal</span>' : "") + (g.fijo ? '<span class="tag fijo">Fijo</span>' : "");
+    const pRow = g.tipo === "compartido" ? parteDe(g) : null;
+    const tag = (g.tipo === "personal" ? '<span class="tag">Personal</span>' : "")
+      + (pRow != null && Math.abs(pRow - cfg.parteA) > 0.001 ? `<span class="tag fijo">${Math.round(pRow * 100)}/${Math.round((1 - pRow) * 100)}</span>` : "")
+      + (g.fijo ? '<span class="tag fijo">Fijo</span>' : "");
     return `<button type="button" class="row${g.pend ? " pend" : ""}" data-edit="${esc(g.id)}"><span class="dot" style="background:${color(c.c)}"></span>
       <span class="main"><div class="t">${esc(titulo)}</div><div class="s">${esc(sub)}${tag}</div></span>
       <span class="amt">${eur(g.cent)}</span></button>`;
@@ -941,14 +952,19 @@ nav.tabs button { font-size: 11px; }
     const p = parteForm();
     const distinto = Math.abs(p - cfg.parteA) > 0.001;
     if (S.fTipo === "compartido") {
-      $("#f-reparto").innerHTML = `Se reparte <b>${Math.round(p * 100)} % ${esc(nombre("A"))} · ${Math.round((1 - p) * 100)} % ${esc(nombre("B"))}</b>${distinto ? " (solo en este gasto)" : ""}. `
-        + (S.parteOpen ? `<button type="button" class="inline-link" id="f-parte-reset">Volver al reparto habitual</button>` : `<button type="button" class="inline-link" id="f-parte-go">Cambiar</button>`);
+      $("#f-reparto").innerHTML = `<span class="reparto-line"><span>Reparto: <b>${Math.round(p * 100)} % ${esc(nombre("A"))} · ${Math.round((1 - p) * 100)} % ${esc(nombre("B"))}</b>${distinto ? " · solo en este gasto" : ""}</span>`
+        + `<button type="button" class="btn-mini" id="f-parte-go" aria-expanded="${S.parteOpen}" aria-controls="f-parte-wrap">${S.parteOpen ? "Ocultar" : "Modificar"}</button></span>`;
     } else {
       $("#f-reparto").textContent = `Solo lo verás tú (${nombre(yo || S.fPaga)}). No entra en el reparto.`;
     }
     $("#f-parte-wrap").hidden = !(S.fTipo === "compartido" && S.parteOpen);
     if (S.parteOpen) {
-      $("#f-parte").value = Math.round(p * 100);
+      const pc = Math.round(p * 100), hab = Math.round(cfg.parteA * 100);
+      const opciones = [[hab, `Habitual (${hab}/${100 - hab})`], [50, "50/50"], [70, "70/30"], [30, "30/70"], [100, "Todo " + nombre("A")], [0, "Todo " + nombre("B")]]
+        .filter((o, i, arr) => arr.findIndex((x) => x[0] === o[0]) === i);
+      $("#f-parte-presets").innerHTML = opciones.map(([v, t]) => `<button type="button" class="chip" data-parte="${v}" aria-pressed="${pc === v}">${esc(t)}</button>`).join("");
+      $("#f-parte-nota").textContent = S.editId ? "Se aplica solo a este gasto y se recalcula el balance al guardar." : "Se aplica solo a este gasto. El reparto habitual se cambia en Ajustes.";
+      $("#f-parte").value = pc;
       $("#f-parte-a").textContent = `${nombre("A")} ${Math.round(p * 100)} %`;
       $("#f-parte-b").textContent = `${nombre("B")} ${Math.round((1 - p) * 100)} %`;
     }
@@ -1934,7 +1950,7 @@ nav.tabs button { font-size: 11px; }
     S.editId = id; S.modo = g.tipo === "ingreso" ? "ingreso" : "gasto"; S.fFijo = g.fijo || null;
     S.fCat = g.cat; S.fPaga = g.paga === "B" ? "B" : "A"; S.fTipo = g.tipo === "personal" ? "personal" : "compartido";
     S.fParte = g.tipo === "compartido" ? parteDe(g) : null;
-    S.parteOpen = g.tipo === "compartido" && Math.abs(parteDe(g) - cfg.parteA) > 0.001;
+    S.parteOpen = false;
     S.catManual = true;
     $("#f-importe").value = ((g.cent || 0) / 100).toFixed(2).replace(".", ",");
     $("#f-nota").value = g.nota || ""; $("#f-fecha").value = g.fecha || hoy();
@@ -1996,7 +2012,7 @@ nav.tabs button { font-size: 11px; }
     if (S.editId || $("#f-importe").value) return;
     S.modo = data.tipo === "ingreso" ? "ingreso" : "gasto"; S.fFijo = data.fijo || null;
     S.fCat = data.cat || S.fCat; S.fPaga = data.paga; S.fTipo = data.tipo === "personal" ? "personal" : "compartido";
-    S.fParte = data.tipo === "compartido" ? data.parteA : null; S.parteOpen = S.fParte != null && Math.abs(S.fParte - cfg.parteA) > 0.001;
+    S.fParte = data.tipo === "compartido" ? data.parteA : null; S.parteOpen = false;
     S.catManual = true;
     $("#f-importe").value = (data.cent / 100).toFixed(2).replace(".", ",");
     $("#f-nota").value = data.nota || ""; $("#f-fecha").value = data.fecha || hoy();
@@ -2095,6 +2111,7 @@ nav.tabs button { font-size: 11px; }
     const t = e.target.closest("button"); if (!t) return;
     const d = t.dataset;
     if (d.go) return go(d.go);
+    if (d.parte !== undefined) { S.fParte = Number(d.parte) / 100; return renderForm(); }
     if (d.sug !== undefined) { $("#f-nota").value = d.sug; renderSug(); autoCat(); return; }
     if (d.cat) { S.fCat = d.cat; S.catManual = true; return renderForm(); }
     if (d.paga) { S.fPaga = d.paga; return renderForm(); }
@@ -2122,8 +2139,7 @@ nav.tabs button { font-size: 11px; }
       case "a-fijo-nuevo": return abrirFijo(null);
       case "fx-cancelar": S.fxEdit = null; S.fxBorrar = false; return renderFijosAjustes();
       case "fx-borrar": return borrarFijo();
-      case "f-parte-go": S.parteOpen = true; S.fParte = parteForm(); return renderForm();
-      case "f-parte-reset": S.parteOpen = false; S.fParte = null; return renderForm();
+      case "f-parte-go": S.parteOpen = !S.parteOpen; if (S.parteOpen && S.fParte == null) S.fParte = parteForm(); return renderForm();
       case "toast-act": { const f = toastFn; clearTimeout(toastT); cerrarToast(); if (f) await f(); return; }
       case "saldo-go": S.saldo = true; return renderRes();
       case "saldo-no": S.saldo = false; return renderRes();
